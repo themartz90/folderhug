@@ -8,9 +8,7 @@ services:
       - worker-key:/worker-key:ro
   media:
     profiles: [media]
-    build:
-      context: .
-      target: media
+    image: ${FOLDERHUG_MEDIA_IMAGE:-ghcr.io/themartz90/folderhug-media:latest}
     environment:
       HTTPWRAPPER_MEDIA_SOCKET: /broker/media.sock
       HTTPWRAPPER_WORKER_KEY: /worker-key/worker.key

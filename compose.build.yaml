@@ -1,0 +1,19 @@
+services:
+  media-setup:
+    image: folderhug:local
+    pull_policy: build
+    build:
+      context: .
+      target: app
+  setup:
+    image: folderhug:local
+    pull_policy: build
+    build:
+      context: .
+      target: app
+  app:
+    image: folderhug:local
+    pull_policy: build
+    build:
+      context: .
+      target: app

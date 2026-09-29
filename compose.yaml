@@ -3,9 +3,7 @@ name: http-wrapper
 services:
   media-setup:
     profiles: [tools]
-    build:
-      context: .
-      target: app
+    image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
     command: [setup-media]
     environment:
       HTTPWRAPPER_WORKER_KEY: /worker-key/worker.key
@@ -17,9 +15,7 @@ services:
     network_mode: none
   setup:
     profiles: [tools]
-    build:
-      context: .
-      target: app
+    image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
     command: [setup]
     environment:
       HTTPWRAPPER_DATA_DIR: /data
@@ -34,9 +30,7 @@ services:
     stdin_open: true
     tty: true
   app:
-    build:
-      context: .
-      target: app
+    image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
     ports:
       - "127.0.0.1:${HTTPWRAPPER_PORT:-8080}:8080"
     environment:

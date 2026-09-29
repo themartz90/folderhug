@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  checks:
+  native:
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: node scripts/check-public.mjs
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= -pyflakes=
+        if: runner.os == 'Linux'
       - run: npm ci
         working-directory: web
       - run: npm run check
@@ -42,37 +43,57 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
+      - run: npm audit
+        working-directory: web
       - run: go test ./...
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - run: npm audit
-        working-directory: web
       - run: go test -race ./...
         if: runner.os == 'Linux'
-      - run: npx playwright install --with-deps chromium firefox webkit
+
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
         working-directory: web
-        if: runner.os == 'Linux'
-      - run: npm run test:e2e
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
         working-directory: web
-        if: runner.os == 'Linux'
-      - run: docker compose config --quiet
-        if: runner.os == 'Linux'
-      - run: docker compose build
-        if: runner.os == 'Linux'
-      - run: docker compose --profile media -f compose.yaml -f compose.media.yaml config --quiet
-        if: runner.os == 'Linux'
-      - run: docker build --target app -t folderhug:ci .
-        if: runner.os == 'Linux'
+      - run: npm run test:e2e -- --project=${{ matrix.browser }}
+        working-directory: web
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker compose -f compose.yaml config --quiet
+      - run: docker compose -f compose.yaml -f compose.media.yaml --profile media config --quiet
+      - run: docker compose -f compose.yaml -f compose.build.yaml config --quiet
+      - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media config --quiet
+      - run: docker compose -f compose.yaml -f compose.build.yaml build app
+      - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media build media
+      - run: docker build --platform linux/amd64 --target app -t folderhug:ci .
       - run: bash scripts/ci-container-smoke.sh folderhug:ci
-        if: runner.os == 'Linux'
-      - run: docker build --target media -t folderhug:media-ci .
-        if: runner.os == 'Linux'
-      - run: docker build --target media-test -t folderhug:media-test-ci .
-        if: runner.os == 'Linux'
+      - run: docker build --platform linux/amd64 --target media-test -t folderhug:media-test-ci .
       - run: >-
           docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777
           -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures
           --entrypoint sh folderhug:media-test-ci -c
           'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures &&
           /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'
-        if: runner.os == 'Linux'

@@ -1,8 +1,8 @@
 # Security
 
-Folderhug is being prepared for its first public release. GitHub private vulnerability reporting will be enabled when the repository becomes public. Until then, there is no public reporting channel or supported release policy.
+Please use **Report a vulnerability** on the repository's [Security tab](https://github.com/themartz90/folderhug/security) for private reports. Do not post source credentials, API tokens, cookies, private URLs, downloaded files, or runtime databases in a public issue.
 
-Once reporting is enabled, use **Report a vulnerability** on the repository's **Security** tab. Do not post source credentials, API tokens, cookies, private URLs, downloaded files, or runtime databases in a public issue. Include the affected revision, deployment configuration with secrets removed, expected behavior, actual behavior, and a small synthetic reproduction. No response-time commitment is offered.
+Include the affected revision, deployment configuration with secrets removed, expected behavior, actual behavior, and a small synthetic reproduction.
 
 ## Deployment boundaries
 

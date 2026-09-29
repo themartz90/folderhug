@@ -5,7 +5,7 @@ import path from 'node:path';
 const staged = process.argv.includes('--staged');
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 const files = [...new Set(git('ls-files', '-z', ...(staged ? [] : ['--cached', '--others', '--exclude-standard']))
-  .split('\0').filter(Boolean))];
+  .split('\0').filter((file) => file && (staged || existsSync(file))))];
 const names = new Set(files);
 const failures = [];
 const privateValues = existsSync('.env') ? readFileSync('.env', 'utf8').split(/\r?\n/)
@@ -14,7 +14,7 @@ const privateValues = existsSync('.env') ? readFileSync('.env', 'utf8').split(/\
 const allowedRoots = new Set(['.github', 'api', 'cmd', 'docs', 'examples', 'internal', 'scripts', 'tests', 'web']);
 const allowedFiles = new Set(['.dockerignore', '.gitattributes', '.gitignore', '.node-version',
   'CONTRIBUTING.md', 'Dockerfile', 'LICENSE', 'README.md', 'SECURITY.md', 'go.mod', 'go.sum',
-  'compose.yaml', 'compose.media.yaml', 'compose.images.yaml']);
+  'compose.yaml', 'compose.media.yaml', 'compose.build.yaml', 'compose.media.build.yaml']);
 
 for (const file of files) {
   if ((!file.includes('/') && !allowedFiles.has(file)) ||

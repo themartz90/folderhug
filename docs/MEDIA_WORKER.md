@@ -2,13 +2,15 @@
 
 Folderhug can show image thumbnails without a second service. Video posters need the optional media worker. It extracts one JPEG frame through a bounded broker connection; the app remains responsible for upstream requests. A poster may be unavailable for a valid video, and a poster does not mean the browser can play that file.
 
-## Run the worker from source
+## Run the worker
 
-Start the core app and create the owner account first. Then create the worker key once and start the media profile:
+Start the core app and create the owner account first. Download the media Compose file into the same directory as `compose.yaml`, create the worker key once, then start the media profile:
 
 ```sh
+curl -fL https://raw.githubusercontent.com/themartz90/folderhug/main/compose.media.yaml -o compose.media.yaml
 docker compose --profile tools run --rm media-setup
-docker compose -f compose.yaml -f compose.media.yaml --profile media up -d --build
+docker compose -f compose.yaml -f compose.media.yaml --profile media pull
+docker compose -f compose.yaml -f compose.media.yaml --profile media up -d app media
 ```
 
 The key setup refuses to replace an existing key. The worker uses that dedicated key, not the owner's credential key. To return to the core app without the worker:
@@ -18,7 +20,18 @@ docker compose -f compose.yaml -f compose.media.yaml --profile media stop media
 docker compose -f compose.yaml up -d app
 ```
 
-The owner-only `/api/v1/status` endpoint reports whether the worker has polled recently. The worker currently has a source-build Compose path. `compose.images.yaml` contains only the core app and setup service; no public worker image is available.
+Include any mounted-folder or source-build overrides and the same Compose project name you used for the app when running these commands.
+
+The owner-only `/api/v1/status` endpoint reports whether the worker has polled recently. The media overlay pulls `ghcr.io/themartz90/folderhug-media:latest`. Set `FOLDERHUG_MEDIA_IMAGE` to a specific tag or digest if you need to pin the worker separately from the app.
+
+For a source build, clone the repository and use the build overrides:
+
+```sh
+docker compose -f compose.yaml -f compose.build.yaml --profile tools run --rm media-setup
+docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media up -d --build app media
+```
+
+Keep the same four files for later worker start and update commands.
 
 ## What it can process
 
@@ -34,4 +47,4 @@ The supplied `compose.media.yaml` gives the worker no network access, a read-onl
 
 The worker reads `HTTPWRAPPER_MEDIA_SOCKET` for the broker Unix socket and `HTTPWRAPPER_WORKER_KEY` for a file containing exactly 32 raw key bytes. `FFMPEG_PATH` optionally selects the executable and defaults to `ffmpeg`. Configuration errors stop startup. SIGINT and SIGTERM cancel the current request and FFmpeg process.
 
-The source-build worker image uses Debian's pinned FFmpeg package. FFmpeg and its libraries keep their own licenses, separate from Folderhug's MIT license. Review [third-party notices](THIRD_PARTY_NOTICES.md) and provide corresponding source and license material for the exact packages before distributing a binary worker image.
+The worker image includes Debian's pinned FFmpeg package. FFmpeg and its libraries keep their own licenses, separate from Folderhug's MIT license. See [third-party notices](THIRD_PARTY_NOTICES.md) for the distributed packages and license material.

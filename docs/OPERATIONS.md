@@ -1,42 +1,40 @@
 # Compose operations and backups
 
-The core deployment uses one app container and SQLite. The optional video poster worker is described in [MEDIA_WORKER.md](MEDIA_WORKER.md). These examples use a Linux shell from the repository root. `compose.yaml` builds from source; `compose.images.yaml` is a standalone configuration for an exact app image reference. No public image is available yet.
+The core deployment uses one app container and SQLite. The default `compose.yaml` pulls the app image from GHCR. The optional video poster worker is described in [MEDIA_WORKER.md](MEDIA_WORKER.md). These examples use a Linux shell from a directory containing the Compose file.
 
-## First start from source
+## First start
 
 ```sh
-docker compose build app setup
+docker compose pull
 docker compose --profile tools run --rm setup
 docker compose up -d app
 docker compose ps
 ```
 
-`compose.yaml` uses the `http-wrapper` Compose project name. Keep that name when updating an existing source installation so Compose selects the same named volumes.
+Setup prompts for an owner password of at least 12 characters. It refuses to replace an existing owner. Open `http://localhost:8080` on the host and sign in. The port binds to loopback by default. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
 
-## Candidate image installation
+Keep the same Compose project name and file when updating an installation. Changing the project name selects different named volumes. Do not run multiple app instances against the same database. The default project name is set by `compose.yaml`; if you started with `-p`, use the same value for every later command.
 
-When a verified image tag or digest is supplied, set `FOLDERHUG_IMAGE` to that exact reference and use `compose.images.yaml` by itself. The same reference is used for owner setup and the app. Registry access is required while an image is private:
+## Build from source
+
+Clone the repository to get the build context and use `compose.build.yaml` as an override. Use both files for every command in this installation:
 
 ```sh
-export FOLDERHUG_IMAGE='<exact image tag or digest>'
-docker compose -f compose.images.yaml -p folderhug pull
-docker compose -f compose.images.yaml -p folderhug --profile tools run --rm setup
-docker compose -f compose.images.yaml -p folderhug up -d app
-docker compose -f compose.images.yaml -p folderhug ps
+git clone https://github.com/themartz90/folderhug.git
+cd folderhug
+docker compose -f compose.yaml -f compose.build.yaml build app setup
+docker compose -f compose.yaml -f compose.build.yaml --profile tools run --rm setup
+docker compose -f compose.yaml -f compose.build.yaml up -d app
 ```
 
-The example reference above is a placeholder, not a public image reference. The image file uses the `folderhug` Compose project name for a fresh installation. If you are moving an existing source installation to an image, add `-p http-wrapper` to each image command after confirming that it is the original project name. This keeps the existing volumes. Do not run source and image app containers against the same database at once.
+Both modes use the same volumes when the Compose project name stays the same. Do not run two app containers against those volumes at once. Record the source revision or image digest before updating.
 
-The remaining commands on this page use the source Compose file. For an image installation, keep `-f compose.images.yaml` and the installation's project name on every backup, update, and recovery command. A fresh image installation uses `-p folderhug`; a migrated source installation normally uses `-p http-wrapper`. For example, `docker compose stop app` becomes `docker compose -f compose.images.yaml -p folderhug stop app` on a fresh image installation. Use the same prefix for `run`, `start`, `up`, `pull`, and `logs`. A separate restore intentionally uses a new project name, as shown below.
-
-Setup prompts for an owner password of at least 12 characters. It refuses to replace an existing owner. The default address is `http://localhost:8080`, bound to the host's loopback interface. To select another local port, set both values before running Compose:
+The remaining examples use the default image installation without overlays. If you use a mounted-folder override, include `-f compose.yaml -f compose.mounts.yaml` in every later Compose command so an update keeps the mount. For a source build, use `-f compose.yaml -f compose.build.yaml`, followed by any mount override. Keep any `-p` project name you selected at first start. To choose another local port, set both values before running Compose:
 
 ```sh
 export HTTPWRAPPER_PORT=18080
 export HTTPWRAPPER_PUBLIC_URL=http://localhost:18080
 ```
-
-A different Compose project name selects different named volumes. Do not run multiple app instances against the same database.
 
 `/health/live` reports that the HTTP server is responding. `/health/ready` also checks the database. Neither checks upstream credentials or source availability. `docker compose logs --tail=100 app` shows recent app logs; inspect logs before sharing them.
 
@@ -100,7 +98,7 @@ Preserve these items together:
 
 The thumbnail cache can be recreated. Treat the database and download archives as private: they contain source paths, job history, token records, and downloaded files. Keep the key backup separate from the database backup when your backup system supports separate access controls.
 
-The commands below use the source-build Compose file. For an image installation, apply the image file and project prefix described above to every command. Keep `FOLDERHUG_IMAGE` set to the exact image reference used by that installation. The image configuration does not include a media worker.
+The commands below use the default Compose file. If the media worker is running, stop it with the same `compose.media.yaml` overlay and project name used to start it. Keep the image reference or source revision with the backup record.
 
 ```sh
 docker compose stop app
@@ -119,7 +117,7 @@ For a native Windows installation, stop its process and copy the complete config
 
 ## Restore into a separate installation
 
-Rehearse restoration into an unused Compose project and port. Inspect existing projects and volumes first; the example project name and port below must be free. Use the matching source revision or exact image reference before restoring. Set `backup` and `key_backup` to the matching archive directories in the current shell. Do not run owner setup on the restored database. For an image restore, add `-f compose.images.yaml` to each restore command and keep the explicit `-p http-wrapper-restore` shown below.
+Rehearse restoration into an unused Compose project and port. Inspect existing projects and volumes first; the example project name and port below must be free. Use the matching source revision or image reference before restoring. Set `backup` and `key_backup` to the matching archive directories in the current shell. Do not run owner setup on the restored database. Keep the explicit `-p http-wrapper-restore` on each command below.
 
 These commands refuse a nonempty destination directory:
 
@@ -138,7 +136,7 @@ A restored database also restores its authentication records. Use owner recovery
 
 ## Update and owner recovery
 
-Before an update, stop and back up the installation and record its source revision or image digest. For a source build, build the selected revision and start it with the same Compose project name. For an image installation, set `FOLDERHUG_IMAGE` to the reviewed replacement reference, then use `docker compose -f compose.images.yaml -p <installation-project> pull` and `docker compose -f compose.images.yaml -p <installation-project> up -d app`. Replace `<installation-project>` with `folderhug` for a fresh image installation or the original project name for a migrated one. Database migrations run on startup. There are no down migrations; a rollback may require the old binary and its matching pre-update backup in a separate installation.
+Before an update, stop and back up the installation and record its current image digest or source revision. For the default installation, download the reviewed replacement Compose file if it changed, run `docker compose pull`, then run `docker compose up -d app` with the same project name. Set `FOLDERHUG_IMAGE` to a specific tag or digest when you need to pin the app image; use that same value for setup and app commands. For a source build, select the intended source revision, rebuild with both Compose files, and start against the intended volumes. Database migrations run on startup. There are no down migrations; a rollback may require the old binary and its matching pre-update backup in a separate installation.
 
 To change a forgotten owner password, stop the app and run the recovery command using the existing database and key:
 
@@ -150,4 +148,4 @@ docker compose up -d app
 
 Recovery prompts for a new password and revokes all owner sessions and API tokens. It preserves the credential key. With a native build, stop the process and run `http-wrapper recover` with the same directory configuration. Neither recovery nor a routine update requires deleting volumes.
 
-On an image installation, run the same three recovery steps with `docker compose -f compose.images.yaml -p <installation-project>` in place of `docker compose`. Keep `FOLDERHUG_IMAGE` set to the exact image reference already running for that installation.
+Keep any `FOLDERHUG_IMAGE` override set to the image reference already running for that installation during recovery. For a source build, add `-f compose.yaml -f compose.build.yaml` and keep the original project name on all three commands.

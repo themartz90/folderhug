@@ -39,6 +39,11 @@ ENTRYPOINT ["http-wrapper"]
 CMD ["serve"]
 
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS media
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.source="https://github.com/themartz90/folderhug" \
+      org.opencontainers.image.title="Folderhug media worker" \
+      org.opencontainers.image.description="Video thumbnails for Folderhug" \
+      org.opencontainers.image.revision=$VCS_REF
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg=7:5.1.9-0+deb12u1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \

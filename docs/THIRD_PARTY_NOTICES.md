@@ -31,7 +31,7 @@ The runtime notices cover Svelte 5.57.1, clsx 2.1.1, esm-env 1.2.2, `@tabler/ico
 
 The Folderhug wordmark uses outlined Nunito ExtraBold shapes. Nunito is copyright 2014 The Nunito Project Authors and licensed under the SIL Open Font License 1.1. The license is included with the [served branding assets](../web/public/brand/FONT-LICENSE.txt). The app does not load a font file for the wordmark.
 
-The lockfile also records development tools, including Vite, TypeScript, ESLint, Vitest, Playwright, and the OpenAPI generator. Their packages and downloaded browser builds retain their own licenses. `web/package-lock.json` identifies the npm package versions and license metadata. Development tools are not installed in the final app image. A release audit must still check the actual built browser bundle and the contents of each binary image rather than treating this source inventory as a complete image bill of materials.
+The lockfile also records development tools, including Vite, TypeScript, ESLint, Vitest, Playwright, and the OpenAPI generator. Their packages and downloaded browser builds retain their own licenses. `web/package-lock.json` identifies the npm package versions and license metadata. Development tools are not installed in the final app image. This document lists source dependencies; the package inventory for an image depends on its exact build.
 
 ## Container packages and FFmpeg
 
@@ -39,13 +39,4 @@ The app image includes Debian runtime packages such as the CA certificate bundle
 
 The media image retains Debian copyright files, `/usr/share/http-wrapper/ffmpeg-build.txt`, and `/usr/share/http-wrapper/packages.txt`. The base image and FFmpeg version are pinned; other Debian packages are resolved when the image is built. See [MEDIA_WORKER.md](MEDIA_WORKER.md) for the package selection and source links.
 
-Before publishing a binary or container image, preserve the notices with the artifact, identify the exact installed packages, and provide the corresponding source and license material required for those distributed packages. The current source Dockerfile and links to Debian packages do not by themselves complete that distribution work. No public image has been published.
-
-## Publication items still pending
-
-- The source repository is [themartz90/folderhug](https://github.com/themartz90/folderhug). The Go module uses that path.
-- Enable GitHub private vulnerability reporting when the repository becomes public, and document the supported release policy.
-- Select release artifacts and any container registry names, then record their exact dependency and package inventories.
-- Package the matching third-party notices and FFmpeg/dependency source material required for each distributed binary image.
-
-The license appendix is a local source inventory, not a claim that these publication items have passed review.
+If you redistribute a modified image, preserve its notices and provide the corresponding source and license material required by the packages it contains. The Dockerfile alone is not the corresponding source for Debian's binary packages.

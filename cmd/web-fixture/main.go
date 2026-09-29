@@ -190,7 +190,9 @@ func run() error {
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return server.Shutdown(shutdown)
+	// Let the control handler flush its shutdown response before closing sockets.
+	controlErr := controlServer.Shutdown(shutdown)
+	return errors.Join(controlErr, server.Shutdown(shutdown))
 }
 
 func runtimeDirectory() (string, error) {

@@ -24,6 +24,8 @@ test('browsing stays local and has no unexpected browser errors', async ({ page 
 });
 
 test('phone controls retain touch targets with reduced motion', async ({ page }) => {
+  // Firefox can report a 44 px DOMRect as 43.9999847 px.
+  const minimumTarget = 44 - 0.001;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await openLibrary(page);
@@ -42,15 +44,15 @@ test('phone controls retain touch targets with reduced motion', async ({ page })
     const button = page.getByRole('button', { name, exact: true });
     await expect(button).toBeVisible();
     const box = await button.boundingBox();
-    expect(box?.height, name).toBeGreaterThanOrEqual(44);
-    expect(box?.width, name).toBeGreaterThanOrEqual(44);
+    expect(box?.height, name).toBeGreaterThanOrEqual(minimumTarget);
+    expect(box?.width, name).toBeGreaterThanOrEqual(minimumTarget);
   }
   const selection = page
     .getByRole('checkbox', { name: 'Select readme.txt', exact: true })
     .locator('..');
   const box = await selection.boundingBox();
-  expect(box?.height).toBeGreaterThanOrEqual(44);
-  expect(box?.width).toBeGreaterThanOrEqual(44);
+  expect(box?.height).toBeGreaterThanOrEqual(minimumTarget);
+  expect(box?.width).toBeGreaterThanOrEqual(minimumTarget);
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,
   );
