@@ -1,0 +1,177 @@
+.activity-page {
+  min-width: 0;
+}
+.activity-page .page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.activity-page .job {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.activity-page .job-main {
+  min-width: min(260px, 100%);
+}
+.activity-page .job-main strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.activity-page .job-meta {
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.activity-page .job-actions,
+.activity-actions,
+.activity-pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.activity-page .job-actions {
+  flex-basis: 100%;
+}
+.activity-page .activity-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.activity-page .activity-state {
+  font-size: 12px;
+  font-weight: 600;
+}
+.activity-page .activity-empty {
+  padding: 32px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.activity-pagination {
+  margin-top: 20px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.activity-page .activity-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.activity-page .activity-filters .form-field {
+  margin: 0;
+  flex: 1 1 170px;
+}
+.activity-page .activity-filters .search-query {
+  flex-basis: 270px;
+}
+.activity-page .activity-filters details {
+  flex-basis: 100%;
+}
+.activity-page .activity-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.activity-page .activity-section {
+  margin: 24px 0 12px;
+  font-size: 15px;
+}
+.activity-page .activity-coverage {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 20px 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.activity-page .activity-coverage ul {
+  padding-left: 18px;
+}
+.activity-page .result-name {
+  text-align: left;
+  overflow-wrap: anywhere;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.activity-page .result-path {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.activity-page .result-checkbox,
+.token-choice {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+  font-size: 12px;
+}
+.activity-page .result-checkbox {
+  flex-shrink: 0;
+  min-width: 36px;
+}
+.activity-page input[type='checkbox'],
+.token-choice input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.token-options {
+  display: grid;
+  gap: 4px;
+  margin: 16px 0;
+}
+.token-choice small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 3px;
+}
+.token-secret {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--text);
+  font: 12px monospace;
+}
+.activity-confirm-copy {
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .activity-page .button,
+  .activity-page .result-name,
+  .activity-page summary,
+  .activity-page .result-checkbox,
+  .token-choice {
+    min-height: 44px;
+  }
+  .activity-page .page-heading {
+    flex-wrap: wrap;
+  }
+  .activity-page .job-main {
+    min-width: 0;
+    flex-basis: calc(100% - 52px);
+  }
+  .activity-page .job-actions .button {
+    flex: 1 1 auto;
+  }
+}

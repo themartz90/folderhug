@@ -1,0 +1,83 @@
+name: http-wrapper
+
+services:
+  media-setup:
+    profiles: [tools]
+    build:
+      context: .
+      target: app
+    command: [setup-media]
+    environment:
+      HTTPWRAPPER_WORKER_KEY: /worker-key/worker.key
+    volumes:
+      - worker-key:/worker-key
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+  setup:
+    profiles: [tools]
+    build:
+      context: .
+      target: app
+    command: [setup]
+    environment:
+      HTTPWRAPPER_DATA_DIR: /data
+      HTTPWRAPPER_KEYS_DIR: /keys
+    volumes:
+      - data:/data
+      - keys:/keys
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    stdin_open: true
+    tty: true
+  app:
+    build:
+      context: .
+      target: app
+    ports:
+      - "127.0.0.1:${HTTPWRAPPER_PORT:-8080}:8080"
+    environment:
+      GOMEMLIMIT: 384MiB
+      HTTPWRAPPER_ADDR: "0.0.0.0:8080"
+      HTTPWRAPPER_PUBLIC_URL: "${HTTPWRAPPER_PUBLIC_URL:-http://localhost:8080}"
+      HTTPWRAPPER_DATA_DIR: /data
+      HTTPWRAPPER_KEYS_DIR: /keys
+      HTTPWRAPPER_DOWNLOADS_DIR: /downloads
+      HTTPWRAPPER_MOUNTED_ROOTS: '${HTTPWRAPPER_MOUNTED_ROOTS:-[]}'
+      HTTPWRAPPER_CACHE_DIR: /cache
+    volumes:
+      - data:/data
+      - keys:/keys:ro
+      - downloads:/downloads
+      # Add writable host folders here, then list their container paths in HTTPWRAPPER_MOUNTED_ROOTS.
+      # - type: bind
+      #   source: /srv/media
+      #   target: /mnt/media
+      #   bind:
+      #     create_host_path: false
+      - cache:/cache
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    pids_limit: 128
+    restart: unless-stopped
+    stop_grace_period: 25s
+    healthcheck:
+      test: [CMD, http-wrapper, healthcheck]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  data:
+  keys:
+  downloads:
+  cache:
+  worker-key:

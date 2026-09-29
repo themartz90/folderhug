@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Folderhug</title>
+  <g stroke="#402016" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#FBE9D0" d="M11 23C7 17 7 7 11 5C15 3 23 8 26 12L21 23ZM53 23C57 17 57 7 53 5C49 3 41 8 38 12L43 23Z"/>
+    <path fill="#C65A26" d="M10 26C10 14 20 10 32 10S54 14 54 26C58 37 49 42 32 42S6 37 10 26Z"/>
+    <path fill="#FBE9D0" stroke="none" d="M14 29C18 25 21 27 21 30C21 34 25 36 32 36C39 36 43 34 43 30C43 27 46 25 50 29C54 35 44 39 32 39S10 35 14 29Z"/>
+    <path fill="#FBE9D0" stroke="none" d="M24 32C24 26 40 26 40 32V37H24Z"/>
+    <g fill="#402016" stroke="none"><ellipse cx="24" cy="24" rx="2.2" ry="2.7"/><ellipse cx="40" cy="24" rx="2.2" ry="2.7"/><path d="M29 30Q32 27 35 30Q35 33 32 33Q29 33 29 30Z"/></g>
+    <path fill="#FFCA4B" d="M15 34H25L29 39H48Q51 39 51 42V56Q51 59 48 59H15Q12 59 12 56V37Q12 34 15 34Z"/>
+    <path fill="#C65A26" d="M49 47C59 47 59 55 53 59C48 63 40 62 39 57C38 52 43 51 47 52Z"/>
+    <path fill="#FBE9D0" stroke="none" d="M46 50C51 51 52 56 48 61L53 59C57 55 53 50 49 48Z"/>
+    <path fill="#563025" d="M13 38C18 37 21 39 21 43C21 47 18 48 13 47C9 46 9 40 13 38ZM51 38C46 37 43 39 43 43C43 47 46 48 51 47C55 46 55 40 51 38Z"/>
+  </g>
+</svg>

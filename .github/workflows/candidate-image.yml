@@ -1,0 +1,99 @@
+name: Private candidate image
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_to_ghcr:
+        description: Push the tested revision image to private GHCR storage
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: candidate-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main and a private repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow check.yml --commit "$GITHUB_SHA" --event push \
+            --json status,conclusion,headSha | jq -e --arg sha "$GITHUB_SHA" \
+            'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the source boundary
+        run: node scripts/check-public.mjs
+      - name: Build and load the core app
+        run: docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:candidate-smoke .
+      - name: Check image Compose and synthetic startup
+        run: |
+          FOLDERHUG_IMAGE=folderhug:candidate-smoke docker compose -f compose.images.yaml config --quiet
+          bash scripts/ci-container-smoke.sh folderhug:candidate-smoke
+
+  store-private-candidate:
+    if: inputs.push_to_ghcr
+    needs: build-and-smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Confirm private destination
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          package="users/${GITHUB_REPOSITORY_OWNER}/packages/container/folderhug"
+          if visibility=$(gh api "$package" --jq .visibility 2>"$RUNNER_TEMP/package-error"); then
+            test "$visibility" = private
+          else
+            if ! grep -q 'HTTP 404' "$RUNNER_TEMP/package-error"; then
+              cat "$RUNNER_TEMP/package-error" >&2
+              exit 1
+            fi
+          fi
+      - name: Rebuild and smoke the exact revision
+        run: |
+          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:candidate-smoke .
+          bash scripts/ci-container-smoke.sh folderhug:candidate-smoke
+      - name: Push revision tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          docker tag folderhug:candidate-smoke "$image"
+          docker push "$image"
+          digest=$(docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "ghcr.io/${GITHUB_REPOSITORY,,}@sha256:" | head -n 1)
+          test -n "$digest"
+          for attempt in {1..10}; do
+            if visibility=$(gh api "users/${GITHUB_REPOSITORY_OWNER}/packages/container/folderhug" --jq .visibility 2>/dev/null); then
+              test "$visibility" = private
+              echo "Private candidate stored as $image"
+              echo "Digest: $digest"
+              printf 'Source: `%s`\nImage: `%s`\nDigest: `%s`\nPlatform: `linux/amd64`\nPackage visibility: `private`\n' \
+                "$GITHUB_SHA" "$image" "$digest" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Could not verify that the GHCR package is private.' >&2
+          exit 1

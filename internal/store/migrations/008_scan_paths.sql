@@ -1,0 +1,3 @@
+ALTER TABLE scan_jobs ADD COLUMN root_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE scan_jobs ADD COLUMN active_since TEXT;
+ALTER TABLE scan_index ADD COLUMN path_key TEXT NOT NULL DEFAULT '';

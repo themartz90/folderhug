@@ -1,0 +1,1175 @@
+openapi: 3.1.0
+info:
+  title: Folderhug API
+  version: 0.1.0
+  description: |
+    Version 1 API for Folderhug.
+    All paths below use JSON with snake_case names except file content, exports and events.
+    Owner sessions can access every profile and job. Tokens are restricted to their listed
+    profiles and scopes; missing or foreign objects return not_found without disclosure.
+    Credentials and bearer secrets must never appear in URLs, logs or read responses.
+
+    Cookie-authenticated mutations require the X-CSRF-Token from GET /auth/session and a
+    matching configured Origin. Login checks Origin but does not require an existing CSRF
+    token. Bearer requests use Authorization and cannot fall back to a cookie on failure.
+
+    Entry IDs are opaque and profile-bound. The reserved directory ID root refers to the
+    profile root. IDs remain stable across snapshots while the profile URL is unchanged.
+    escaped_path preserves upstream URL encoding without Unicode normalization or double
+    decoding. It is never a local filesystem path. Requests use IDs, never arbitrary URLs.
+    Encoded separators, traversal, backslashes, invalid percent encodings and outside-root
+    links are rejected. A root_url change invalidates cached entry IDs and stops affected jobs.
+
+    Cursor pages bind to the query, authority and snapshot. Default limit is 200, maximum
+    1000. Sorting uses entry ID as the final tie-breaker, natural numeric name ordering,
+    case-folded comparison and nulls last in either direction. Folders-first defaults true.
+    An expired snapshot returns 409 snapshot_expired; restart without the cursor. Refresh
+    makes a new snapshot and cannot be combined with a cursor. Stale data is labeled explicitly.
+
+    Idempotency-Key is required for scan and download creation. Keys are 1-128 printable ASCII
+    characters, scoped to principal and route, and retained for 24 hours. Same key and body
+    returns the original status and result; different bodies return 409 idempotency_conflict.
+    Failed authorization is not retained. Retry transport failures with the same key; obey
+    Retry-After on 429 or 503. Never automatically retry a non-idempotent mutation with a new key.
+
+    Downloads transition queued to running, running to paused/waiting_for_credentials/
+    interrupted/completed/failed/cancelled, paused or waiting_for_credentials to queued or
+    cancelled, and interrupted to queued/failed/cancelled. Retry moves failed or cancelled
+    to queued; completed is terminal. Invalid actions return 409 invalid_state. Resume with
+    an unverifiable representation returns restart_required unless allow_restart is true.
+    Scans use the same states, plus partial for a reached limit or incomplete coverage.
+    Resume may queue a paused, interrupted, waiting_for_credentials or partial scan when
+    work remains within its whole-job entry and active-time limits. A scan that reached
+    a configured limit needs a new scan with a smaller scope or a higher allowed limit.
+    A newer overlapping scan prevents an older job from resuming or retrying. The action
+    returns 409 scan_superseded; start a new scan to refresh that scope.
+    A scan is completed only after every directory in its selected scope was visited.
+    Each fetch, persistence, and final pruning phase reserves at most 30 seconds of its
+    remaining active-time budget. Normal completion settles the actual duration. An abrupt
+    crash retains the reservation, conservatively charging up to 30 seconds; offline time
+    is excluded. Each phase has a matching deadline. Repeated crashes do not reset the budget.
+
+    Errors use code, message and request_id. Source authentication failures return 502
+    upstream_auth_required, never the wrapper's 401 unauthenticated. Messages omit source
+    response bodies and credentials. Every response carries X-Request-ID.
+servers:
+  - url: /api/v1
+security:
+  - owner_session: []
+  - bearer_token: []
+x-scope-matrix:
+  owner_session: All operations; CSRF required for mutations.
+  browse:read: Profile reads, listings, metadata, search, scan reads/exports, scan events.
+  content:read: Upstream content, thumbnail requests and retrieval, own completed download content.
+  scan:write: Create scans and control scans created by this token within its profiles.
+  downloads:write: Destinations, create/list/read/control this token's download jobs and job events.
+  credentials:unlock: Temporary unlock/lock of this token's own credential lease; no stored credentials.
+  owner_only: Profile edits, connection tests, stored credentials, token administration, preferences, bookmarks, completed-file deletion.
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      security: []
+      requestBody:
+        $ref: '#/components/requestBodies/Login'
+      responses:
+        '200': { $ref: '#/components/responses/Session' }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      operationId: logout
+      security: [{ owner_session: [] }]
+      responses:
+        '204': { description: Session and its temporary credentials were cleared. }
+        default: { $ref: '#/components/responses/Error' }
+  /auth/session:
+    get:
+      operationId: getSession
+      security: [{ owner_session: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Session' }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles:
+    get:
+      operationId: listProfiles
+      x-required-scopes: [browse:read]
+      responses:
+        '200':
+          description: Profiles visible to the caller, ordered by position then ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profiles]
+                properties:
+                  profiles: { type: array, items: { $ref: '#/components/schemas/Profile' } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createProfile
+      security: [{ owner_session: [] }]
+      requestBody: { $ref: '#/components/requestBodies/ProfileWrite' }
+      responses:
+        '201': { $ref: '#/components/responses/Profile' }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getProfile
+      x-required-scopes: [browse:read]
+      responses:
+        '200': { $ref: '#/components/responses/Profile' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateProfile
+      security: [{ owner_session: [] }]
+      description: Omitted fields remain unchanged. Root changes stop work and invalidate cached IDs.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/ProfilePatch' } }
+      responses:
+        '200': { $ref: '#/components/responses/Profile' }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteProfile
+      security: [{ owner_session: [] }]
+      description: Cancel jobs and remove metadata/credentials. Keep completed local files for the owner.
+      responses:
+        '204': { description: Profile removed. No upstream files were changed. }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/test:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: testProfile
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Bounded listing check. Any range result is specific to the sampled file.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/ConnectionTest' } }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/unlock:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: unlockProfile
+      x-required-scopes: [credentials:unlock]
+      description: Create a principal-bound memory-only credential lease, cleared on logout, expiry or restart.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/UnlockRequest' } }
+      responses:
+        '200':
+          description: Lease created. No credential is returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [expires_at]
+                properties:
+                  expires_at: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/lock:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: lockProfile
+      x-required-scopes: [credentials:unlock]
+      description: Clear the caller's lease and cancel its upstream requests. Does not delete remembered credentials.
+      responses:
+        '204': { description: Lease cleared. }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/browse:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: browse
+      x-required-scopes: [browse:read]
+      parameters:
+        - { name: directory_id, in: query, schema: { type: string, default: root } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/NameFilter' }
+        - { $ref: '#/components/parameters/Category' }
+        - { $ref: '#/components/parameters/Extensions' }
+        - { $ref: '#/components/parameters/MinSize' }
+        - { $ref: '#/components/parameters/MaxSize' }
+        - { $ref: '#/components/parameters/ModifiedAfter' }
+        - { $ref: '#/components/parameters/ModifiedBefore' }
+        - { name: show_folders, in: query, schema: { type: boolean, default: true } }
+        - { name: sort, in: query, schema: { type: string, enum: [name, size, modified, type], default: name } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc], default: asc } }
+        - { name: folders_first, in: query, schema: { type: boolean, default: true } }
+        - { name: refresh, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: A bounded page from one listing snapshot. Filtering applies only to this directory.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/BrowsePage' } }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/entries/{entry_id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }, { $ref: '#/components/parameters/EntryID' }]
+    get:
+      operationId: getEntry
+      x-required-scopes: [browse:read]
+      responses:
+        '200':
+          description: Entry metadata after checking profile ownership.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Entry' } }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/entries/{entry_id}/content:
+    parameters:
+      - { $ref: '#/components/parameters/ID' }
+      - { $ref: '#/components/parameters/EntryID' }
+      - { $ref: '#/components/parameters/Range' }
+      - { $ref: '#/components/parameters/IfRange' }
+      - { $ref: '#/components/parameters/IfNoneMatch' }
+      - name: disposition
+        in: query
+        schema: { type: string, enum: [attachment, preview], default: attachment }
+        description: Preview accepts only passive allowlisted media. HTML and SVG are never inline app-origin content.
+    get:
+      operationId: getEntryContent
+      x-required-scopes: [content:read]
+      responses:
+        '200': { $ref: '#/components/responses/Content' }
+        '206': { $ref: '#/components/responses/PartialContent' }
+        '304': { description: Representation unchanged. }
+        '416': { $ref: '#/components/responses/RangeError' }
+        default: { $ref: '#/components/responses/Error' }
+    head:
+      operationId: headEntryContent
+      x-required-scopes: [content:read]
+      responses:
+        '200': { $ref: '#/components/responses/ContentHeaders' }
+        '206': { $ref: '#/components/responses/ContentHeaders' }
+        '304': { description: Representation unchanged. }
+        '416': { $ref: '#/components/responses/RangeError' }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/scans:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: createScan
+      x-required-scopes: [scan:write]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/ScanCreate' } }
+      responses:
+        '202': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans:
+    get:
+      operationId: listScans
+      x-required-scopes: [browse:read]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: profile_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Visible scans, newest created_at then ID first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scans, next_cursor]
+                properties:
+                  scans: { type: array, items: { $ref: '#/components/schemas/Scan' } }
+                  next_cursor: { type: [string, 'null'] }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getScan
+      x-required-scopes: [browse:read]
+      responses:
+        '200': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: pauseScan
+      x-required-scopes: [scan:write]
+      responses:
+        '202': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}/resume:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: resumeScan
+      x-required-scopes: [scan:write]
+      responses:
+        '202': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: cancelScan
+      x-required-scopes: [scan:write]
+      responses:
+        '202': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}/retry:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: retryScan
+      x-required-scopes: [scan:write]
+      description: Requeue failed or cancelled work while preserving the completed frontier.
+      responses:
+        '202': { $ref: '#/components/responses/Scan' }
+        default: { $ref: '#/components/responses/Error' }
+  /scans/{id}/export:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: exportScan
+      x-required-scopes: [browse:read]
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+      responses:
+        '200':
+          description: Streamed scan results including coverage. CSV cells escape spreadsheet formulas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [coverage, entries]
+                properties:
+                  coverage: { $ref: '#/components/schemas/Coverage' }
+                  entries: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+            text/csv: { schema: { type: string } }
+        default: { $ref: '#/components/responses/Error' }
+  /search:
+    get:
+      operationId: searchIndex
+      x-required-scopes: [browse:read]
+      description: Search indexed names/paths only. An omitted or empty q lists all authorized indexed entries in the requested scope and filters. This never starts a scan.
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 0, maxLength: 512 } }
+        - { name: match, in: query, schema: { type: string, enum: [substring, prefix], default: substring } }
+        - { name: profile_id, in: query, schema: { type: string } }
+        - { name: directory_id, in: query, schema: { type: string }, description: Requires profile_id. }
+        - { name: direct_only, in: query, schema: { type: boolean, enum: [true] }, description: Return direct children of directory_id only. }
+        - { name: categories, in: query, schema: { type: string }, description: Comma-separated file types. Cannot be combined with category. }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Category' }
+        - { $ref: '#/components/parameters/Extensions' }
+        - { $ref: '#/components/parameters/MinSize' }
+        - { $ref: '#/components/parameters/MaxSize' }
+        - { $ref: '#/components/parameters/ModifiedAfter' }
+        - { $ref: '#/components/parameters/ModifiedBefore' }
+      responses:
+        '200':
+          description: Results ordered by natural name then profile ID and entry ID; cursor binds to index generation.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/SearchPage' } }
+        default: { $ref: '#/components/responses/Error' }
+  /destinations:
+    get:
+      operationId: listDestinations
+      x-required-scopes: [downloads:write]
+      responses:
+        '200':
+          description: Configured server storage labels. Local filesystem paths are not returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [destinations]
+                properties:
+                  destinations: { type: array, items: { $ref: '#/components/schemas/Destination' } }
+        default: { $ref: '#/components/responses/Error' }
+  /destinations/{id}/folders:
+    get:
+      operationId: listDestinationFolders
+      security: [{ owner_session: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: path, in: query, schema: { type: string, maxLength: 1024 }, description: Slash-separated folder path relative to the configured destination. }
+      responses:
+        '200':
+          description: Existing folders inside one configured mount. Symlinks are not traversed.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/DestinationFolders' } }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads:
+    get:
+      operationId: listDownloads
+      x-required-scopes: [downloads:write]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/JobState' } }
+      responses:
+        '200':
+          description: Owner sees all jobs; tokens see only their own jobs. Newest created_at then ID first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [downloads, next_cursor]
+                properties:
+                  downloads: { type: array, items: { $ref: '#/components/schemas/Download' } }
+                  next_cursor: { type: [string, 'null'] }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createDownload
+      x-required-scopes: [downloads:write]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/DownloadCreate' } }
+      responses:
+        '202': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getDownload
+      x-required-scopes: [downloads:write]
+      responses:
+        '200': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: pauseDownload
+      x-required-scopes: [downloads:write]
+      responses:
+        '202': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/resume:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: resumeDownload
+      x-required-scopes: [downloads:write]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                allow_restart: { type: boolean, default: false }
+      responses:
+        '202': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: cancelDownload
+      x-required-scopes: [downloads:write]
+      description: Cancel work; keep partial output until the separate cleanup action.
+      responses:
+        '202': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/retry:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: retryDownload
+      x-required-scopes: [downloads:write]
+      responses:
+        '202': { $ref: '#/components/responses/Download' }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/partial:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    delete:
+      operationId: deletePartialDownload
+      x-required-scopes: [downloads:write]
+      description: Remove partial local output only after cancellation or failure. Tokens may clean up only their own jobs.
+      responses:
+        '204': { description: Partial output removed. }
+        default: { $ref: '#/components/responses/Error' }
+  /downloads/{id}/content:
+    parameters:
+      - { $ref: '#/components/parameters/ID' }
+      - { $ref: '#/components/parameters/Range' }
+      - { $ref: '#/components/parameters/IfRange' }
+    get:
+      operationId: getDownloadContent
+      x-required-scopes: [content:read]
+      description: Completed local file. Tokens need profile access and ownership of the download job.
+      responses:
+        '200': { $ref: '#/components/responses/Content' }
+        '206': { $ref: '#/components/responses/PartialContent' }
+        '416': { $ref: '#/components/responses/RangeError' }
+        default: { $ref: '#/components/responses/Error' }
+    head:
+      operationId: headDownloadContent
+      x-required-scopes: [content:read]
+      responses:
+        '200': { $ref: '#/components/responses/ContentHeaders' }
+        '206': { $ref: '#/components/responses/ContentHeaders' }
+        '416': { $ref: '#/components/responses/RangeError' }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteDownloadedFile
+      security: [{ owner_session: [] }]
+      description: Explicitly delete the completed local file. Never affects the source file.
+      responses:
+        '204': { description: Local file deleted. }
+        default: { $ref: '#/components/responses/Error' }
+  /profiles/{id}/thumbnails:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    post:
+      operationId: requestThumbnails
+      x-required-scopes: [content:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [entry_ids]
+              properties:
+                entry_ids: { type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: { type: string } }
+      responses:
+        '202':
+          description: Existing thumbnail IDs or accepted bounded work for visible entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thumbnails]
+                properties:
+                  thumbnails: { type: array, items: { $ref: '#/components/schemas/Thumbnail' } }
+        default: { $ref: '#/components/responses/Error' }
+  /thumbnails/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    get:
+      operationId: getThumbnail
+      x-required-scopes: [content:read]
+      responses:
+        '200':
+          description: Already generated thumbnail after profile authorization; no new upstream request.
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '202':
+          description: Thumbnail is pending. Obey Retry-After.
+          headers:
+            Retry-After: { schema: { type: integer, minimum: 1 } }
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Thumbnail' } }
+        default: { $ref: '#/components/responses/Error' }
+  /events:
+    get:
+      operationId: getEvents
+      description: |
+        Session-cookie or bearer-authenticated SSE. Each event has an opaque id, event name,
+        and one JSON data object using Event. Events are scan, download, thumbnail or reset.
+        Scan events require browse:read; download events require downloads:write and job
+        ownership; thumbnail events require content:read. Every event is profile-filtered.
+        Replay retains at most 1000 events for 5 minutes. Last-Event-ID outside that window
+        causes a reset event; refetch authoritative state and then continue listening.
+        Heartbeat comments arrive every 15 seconds. Reconnect delay is 3 seconds. Events
+        omit filenames and credentials. Revocation or session expiry closes the stream.
+        Polling the corresponding resource remains supported.
+      parameters:
+        - { name: Last-Event-ID, in: header, schema: { type: string, maxLength: 128 } }
+      responses:
+        '200':
+          description: Unbuffered SSE stream with Cache-Control no-store.
+          content:
+            text/event-stream: { schema: { type: string } }
+        default: { $ref: '#/components/responses/Error' }
+  /tokens:
+    get:
+      operationId: listTokens
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Token metadata without secrets or secret hashes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens: { type: array, items: { $ref: '#/components/schemas/Token' } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createToken
+      security: [{ owner_session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/TokenCreate' } }
+      responses:
+        '201':
+          description: Secret is shown once. The response uses Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, secret]
+                properties:
+                  token: { $ref: '#/components/schemas/Token' }
+                  secret: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+  /tokens/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    delete:
+      operationId: revokeToken
+      security: [{ owner_session: [] }]
+      description: Revoke access, clear temporary credentials and cancel this token's active work.
+      responses:
+        '204': { description: Token revoked. }
+        default: { $ref: '#/components/responses/Error' }
+  /status:
+    get:
+      operationId: getStatus
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Configured capabilities and current video worker availability. No private paths or source URLs.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Status' } }
+        default: { $ref: '#/components/responses/Error' }
+  /preferences:
+    get:
+      operationId: getPreferences
+      security: [{ owner_session: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Preferences' }
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      operationId: setPreferences
+      security: [{ owner_session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PreferencesUpdate' } }
+      responses:
+        '200': { $ref: '#/components/responses/Preferences' }
+        default: { $ref: '#/components/responses/Error' }
+  /bookmarks:
+    get:
+      operationId: listBookmarks
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Owner's pinned folders, ordered by position then ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookmarks]
+                properties:
+                  bookmarks: { type: array, items: { $ref: '#/components/schemas/Bookmark' } }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createBookmark
+      security: [{ owner_session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/BookmarkCreate' } }
+      responses:
+        '201':
+          description: Folder pinned.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Bookmark' } }
+        default: { $ref: '#/components/responses/Error' }
+  /bookmarks/{id}:
+    parameters: [{ $ref: '#/components/parameters/ID' }]
+    delete:
+      operationId: deleteBookmark
+      security: [{ owner_session: [] }]
+      responses:
+        '204': { description: Bookmark removed. }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    owner_session: { type: apiKey, in: cookie, name: http_wrapper_session }
+    bearer_token: { type: http, scheme: bearer }
+  parameters:
+    ID: { name: id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+    EntryID: { name: entry_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
+    Cursor: { name: cursor, in: query, schema: { type: string, maxLength: 2048 } }
+    NameFilter: { name: name, in: query, schema: { type: string, maxLength: 512 } }
+    Category: { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+    Extensions:
+      name: extensions
+      in: query
+      description: Comma-separated case-insensitive extensions without the dot.
+      schema: { type: string, maxLength: 512 }
+    MinSize: { name: min_size, in: query, schema: { type: integer, minimum: 0 } }
+    MaxSize: { name: max_size, in: query, schema: { type: integer, minimum: 0 } }
+    ModifiedAfter:
+      name: modified_after
+      in: query
+      description: Unknown or timezone-uncertain timestamps do not match instant filters.
+      schema: { type: string, format: date-time }
+    ModifiedBefore: { name: modified_before, in: query, schema: { type: string, format: date-time } }
+    Range: { name: Range, in: header, schema: { type: string }, description: One bytes range; multiple ranges are rejected. }
+    IfRange: { name: If-Range, in: header, schema: { type: string } }
+    IfNoneMatch: { name: If-None-Match, in: header, schema: { type: string } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[\x20-\x7E]+$' }
+  requestBodies:
+    Login:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [password]
+            properties:
+              password: { type: string, minLength: 1, maxLength: 1024, writeOnly: true }
+    ProfileWrite:
+      required: true
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ProfileCreate' } }
+  responses:
+    Error:
+      description: |
+        Structured error. 400 invalid_request; 401 unauthenticated; 403 forbidden/csrf_failed;
+        404 not_found; 409 invalid_state/snapshot_expired/idempotency_conflict/restart_required/scan_superseded;
+        413 request_too_large/listing_limit; 415 unsupported_media; 429 rate_limited/budget_exceeded;
+        502 upstream_auth_required/upstream_unavailable/unsupported_listing/representation_changed;
+        503 unavailable; 507 storage_full. Other stable codes are listed in ErrorCode.
+      headers:
+        X-Request-ID: { schema: { type: string } }
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example: { code: snapshot_expired, message: This listing expired. Refresh the folder., request_id: request-example }
+    Session:
+      description: Active owner session. Response uses Cache-Control no-store.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Session' } }
+    Profile:
+      description: Profile settings and credential state; no username or password.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Profile' } }
+    Scan:
+      description: Authoritative persisted scan state.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Scan' } }
+    Download:
+      description: Authoritative persisted server download state.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Download' } }
+    Preferences:
+      description: Owner preferences.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Preferences' } }
+    ContentHeaders:
+      description: File headers without a body. Unknown length is omitted. Upstream cookies/challenges are stripped.
+      headers:
+        Content-Length: { schema: { type: integer, minimum: 0 } }
+        Content-Type: { schema: { type: string } }
+        Content-Disposition: { schema: { type: string } }
+        ETag: { schema: { type: string } }
+        Last-Modified: { schema: { type: string } }
+        Accept-Ranges: { schema: { type: string, enum: [bytes, none] } }
+        Content-Range: { schema: { type: string } }
+    Content:
+      description: Streamed file; Content-Disposition attachment unless passive preview was explicitly requested.
+      headers:
+        Content-Length: { schema: { type: integer, minimum: 0 } }
+        Content-Disposition: { schema: { type: string } }
+        ETag: { schema: { type: string } }
+        Accept-Ranges: { schema: { type: string, enum: [bytes, none] } }
+      content:
+        application/octet-stream: { schema: { type: string, format: binary } }
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+        image/webp: { schema: { type: string, format: binary } }
+        audio/mpeg: { schema: { type: string, format: binary } }
+        video/mp4: { schema: { type: string, format: binary } }
+        video/webm: { schema: { type: string, format: binary } }
+    PartialContent:
+      description: Verified single byte range from one representation.
+      headers:
+        Content-Range: { required: true, schema: { type: string } }
+        Content-Length: { required: true, schema: { type: integer, minimum: 1 } }
+        ETag: { schema: { type: string } }
+      content:
+        application/octet-stream: { schema: { type: string, format: binary } }
+    RangeError:
+      description: Requested range cannot be served. HEAD has no response body.
+      headers:
+        Content-Range: { schema: { type: string } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ApiError' } }
+  schemas:
+    ErrorCode:
+      type: string
+      enum: [invalid_request, unauthenticated, forbidden, csrf_failed, not_found, invalid_state, snapshot_expired, idempotency_conflict, restart_required, scan_superseded, request_too_large, listing_limit, unsupported_media, rate_limited, budget_exceeded, upstream_auth_required, upstream_unavailable, upstream_timeout, unsupported_listing, representation_changed, range_not_satisfiable, unsafe_path, unsafe_origin, credentials_required, unavailable, storage_full, internal_error]
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        request_id: { type: string }
+    Session:
+      type: object
+      required: [authenticated, csrf_token, expires_at]
+      properties:
+        authenticated: { type: boolean, const: true }
+        csrf_token: { type: string }
+        expires_at: { type: string, format: date-time }
+    Credentials:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, maxLength: 1024, writeOnly: true }
+        password: { type: string, maxLength: 4096, writeOnly: true }
+        remember: { type: boolean, default: false }
+    ProfileCreate:
+      type: object
+      additionalProperties: false
+      required: [name, root_url]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        root_url: { type: string, format: uri, maxLength: 4096 }
+        auth_type: { type: string, enum: [none, basic], default: none }
+        credentials: { $ref: '#/components/schemas/Credentials' }
+        allow_insecure_http: { type: boolean, default: false }
+        previews_enabled: { type: boolean, default: true }
+        connections_per_file: { type: integer, enum: [1, 2, 4], default: 1 }
+        position: { type: integer, minimum: 0, default: 0 }
+    ProfilePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        root_url: { type: string, format: uri, maxLength: 4096 }
+        auth_type: { type: string, enum: [none, basic] }
+        credentials:
+          description: Omit to keep credentials; null clears remembered and temporary credentials.
+          oneOf: [{ $ref: '#/components/schemas/Credentials' }, { type: 'null' }]
+        allow_insecure_http: { type: boolean }
+        previews_enabled: { type: boolean }
+        connections_per_file: { type: integer, enum: [1, 2, 4] }
+        position: { type: integer, minimum: 0 }
+    Profile:
+      type: object
+      required: [id, name, root_url, auth_type, credential_state, allow_insecure_http, previews_enabled, connections_per_file, position]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        root_url: { type: string, format: uri }
+        auth_type: { type: string, enum: [none, basic] }
+        credential_state: { type: string, enum: [not_required, locked, temporary, remembered] }
+        allow_insecure_http: { type: boolean }
+        previews_enabled: { type: boolean }
+        connections_per_file: { type: integer, enum: [1, 2, 4] }
+        position: { type: integer }
+    UnlockRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, maxLength: 1024, writeOnly: true }
+        password: { type: string, maxLength: 4096, writeOnly: true }
+        lease_seconds: { type: integer, minimum: 60, maximum: 28800, default: 3600 }
+    ConnectionTest:
+      type: object
+      required: [status, listing_format, canonical_root_url, range_observation]
+      properties:
+        status: { type: string, enum: [ready] }
+        listing_format: { type: string, enum: [apache_table, apache_pre, nginx] }
+        canonical_root_url: { type: string, format: uri }
+        range_observation: { type: string, enum: [not_tested, supported_for_sample, unsupported_for_sample] }
+    Category:
+      type: string
+      enum: [folder, video, image, audio, document, archive, other]
+    Entry:
+      type: object
+      required: [id, profile_id, parent_id, name, escaped_path, kind, extension, category, size, size_exact, modified_at, modified_text, timezone_known, provenance]
+      properties:
+        id: { type: string, description: 'Opaque profile-bound identity derived from the validated target, never the HTML label.' }
+        profile_id: { type: string }
+        parent_id: { type: string }
+        name: { type: string }
+        escaped_path: { type: string, description: Safe escaped path relative to the configured upstream root; never a local path. }
+        kind: { type: string, enum: [file, directory] }
+        extension: { type: [string, 'null'] }
+        category: { $ref: '#/components/schemas/Category' }
+        size: { type: [integer, 'null'], minimum: 0 }
+        size_exact: { type: boolean, description: False for rounded listing sizes and unknown sizes. }
+        modified_at: { type: [string, 'null'], format: date-time, description: Only populated when the time zone is known. }
+        modified_text: { type: [string, 'null'], description: Source timestamp text for uncertain listing times. }
+        timezone_known: { type: boolean }
+        provenance: { type: string, enum: [apache_table, apache_pre, nginx, response_headers] }
+    BrowsePage:
+      type: object
+      required: [entries, snapshot_id, next_cursor, stale, fetched_at, directory_id, parent_id, total_entries]
+      properties:
+        entries: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+        snapshot_id: { type: string }
+        next_cursor: { type: [string, 'null'] }
+        stale: { type: boolean }
+        fetched_at: { type: string, format: date-time }
+        directory_id: { type: string }
+        parent_id: { type: [string, 'null'] }
+        total_entries: { type: integer, minimum: 0, description: Number matching the current filters in this complete snapshot. }
+    JobState:
+      type: string
+      enum: [queued, running, paused, waiting_for_credentials, interrupted, completed, cancelled, failed]
+    ScanCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        directory_id: { type: string, default: root }
+        max_depth: { type: integer, minimum: 0, maximum: 64, default: 64 }
+        max_entries: { type: integer, minimum: 1, maximum: 100000, default: 100000 }
+        max_seconds: { type: integer, minimum: 1, maximum: 1800, default: 1800 }
+        excluded_directories: { type: array, maxItems: 100, items: { type: string, maxLength: 512 }, description: Relative directory prefixes; entries are still validated against the selected root. }
+        categories: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Category' }, description: Filters output files without suppressing traversal. }
+    Coverage:
+      type: object
+      required: [profile_id, directory_id, state, last_scan_at]
+      properties:
+        profile_id: { type: string }
+        directory_id: { type: string }
+        state: { type: string, enum: [absent, partial, complete, stale] }
+        last_scan_at: { type: [string, 'null'], format: date-time }
+    Scan:
+      type: object
+      required: [id, profile_id, directory_id, state, directories_visited, files_found, directories_failed, directories_skipped, elapsed_seconds, coverage, created_at, updated_at, error]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        directory_id: { type: string }
+        state: { type: string, enum: [queued, running, paused, waiting_for_credentials, interrupted, completed, cancelled, failed, partial] }
+        directories_visited: { type: integer, minimum: 0 }
+        files_found: { type: integer, minimum: 0 }
+        directories_failed: { type: integer, minimum: 0 }
+        directories_skipped: { type: integer, minimum: 0 }
+        elapsed_seconds: { type: number, minimum: 0 }
+        coverage: { $ref: '#/components/schemas/Coverage' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        error: { oneOf: [{ $ref: '#/components/schemas/ApiError' }, { type: 'null' }] }
+    SearchPage:
+      type: object
+      required: [entries, next_cursor, coverage]
+      properties:
+        entries: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+        next_cursor: { type: [string, 'null'] }
+        coverage: { type: array, items: { $ref: '#/components/schemas/Coverage' } }
+    Destination:
+      type: object
+      required: [id, label, available_bytes, available, browseable]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        available_bytes: { type: [integer, 'null'], minimum: 0 }
+        available: { type: boolean }
+        browseable: { type: boolean }
+    DestinationFolders:
+      type: object
+      required: [destination_id, path, folders]
+      properties:
+        destination_id: { type: string }
+        path: { type: string }
+        folders:
+          type: array
+          items:
+            type: object
+            required: [name, path]
+            properties:
+              name: { type: string }
+              path: { type: string }
+    DownloadCreate:
+      type: object
+      additionalProperties: false
+      required: [profile_id, entry_id, destination_id]
+      properties:
+        profile_id: { type: string }
+        entry_id: { type: string, description: One file ID. Directories require a separate scan and review. }
+        destination_id: { type: string }
+        destination_path: { type: string, maxLength: 1024, description: Existing folder relative to an owner-configured destination. Only owner sessions may select mounted folders. }
+        connections: { type: integer, enum: [1, 2, 4], default: 1 }
+        bytes_per_second: { type: [integer, 'null'], minimum: 1024, default: null }
+    Download:
+      type: object
+      required: [id, profile_id, entry_id, name, saved_name, destination_id, destination_path, state, transferred_bytes, total_bytes, bytes_per_second, eta_seconds, connections, fallback_reason, file_available, created_at, updated_at, error]
+      properties:
+        id: { type: string }
+        profile_id: { type: [string, 'null'], description: Null after profile deletion; completed local files remain owner-only. }
+        entry_id: { type: string }
+        name: { type: string }
+        saved_name: { type: [string, 'null'], description: Final filename in the selected folder, including a collision suffix when needed. }
+        destination_id: { type: string }
+        destination_path: { type: string }
+        state: { $ref: '#/components/schemas/JobState' }
+        transferred_bytes: { type: integer, minimum: 0 }
+        total_bytes: { type: [integer, 'null'], minimum: 0, description: Independently known exact total; unknown-length transfers keep null. }
+        bytes_per_second: { type: [number, 'null'], minimum: 0 }
+        eta_seconds: { type: [number, 'null'], minimum: 0 }
+        connections: { type: integer, minimum: 1, maximum: 4 }
+        fallback_reason: { type: [string, 'null'] }
+        file_available: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        error: { oneOf: [{ $ref: '#/components/schemas/ApiError' }, { type: 'null' }] }
+    Thumbnail:
+      type: object
+      required: [id, entry_id, state]
+      properties:
+        id: { type: string }
+        entry_id: { type: string }
+        state: { type: string, enum: [pending, ready, unavailable, disabled] }
+    Event:
+      type: object
+      required: [type, object_id, profile_id, state]
+      properties:
+        type: { type: string, enum: [scan, download, thumbnail, reset] }
+        object_id: { type: [string, 'null'] }
+        profile_id: { type: [string, 'null'] }
+        state: { type: string, description: 'Resource state, or refetch_required for reset.' }
+    TokenScope:
+      type: string
+      enum: [browse:read, content:read, scan:write, downloads:write, credentials:unlock]
+    TokenCreate:
+      type: object
+      additionalProperties: false
+      required: [name, profile_ids, scopes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        profile_ids: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
+        scopes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/TokenScope' } }
+        expires_at: { type: [string, 'null'], format: date-time }
+    Token:
+      type: object
+      required: [id, name, profile_ids, scopes, expires_at, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        profile_ids: { type: array, items: { type: string } }
+        scopes: { type: array, items: { $ref: '#/components/schemas/TokenScope' } }
+        expires_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    Status:
+      type: object
+      additionalProperties: false
+      required: [image_thumbnails, video_worker, cache_max_bytes, stream_max_bytes, server_downloads, segmented_downloads]
+      properties:
+        image_thumbnails: { type: boolean }
+        video_worker:
+          type: string
+          enum: [disabled, ready, unavailable]
+          description: Ready means an authenticated worker polled within the last 15 seconds.
+        cache_max_bytes: { type: integer, minimum: 0 }
+        stream_max_bytes: { type: integer, minimum: 0 }
+        server_downloads: { type: boolean }
+        segmented_downloads: { type: boolean }
+    Preferences:
+      type: object
+      additionalProperties: false
+      required: [theme, profile_views, accent, density, filter_presets, profile_order]
+      properties:
+        theme: { type: string, enum: [system, light, dark] }
+        accent: { type: string, enum: [blue, teal, violet, rose, amber, graphite], default: amber }
+        density: { type: string, enum: [comfortable, compact], default: comfortable }
+        filter_presets:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/FilterPreset' }
+        profile_order:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          description: Existing profile IDs in display order. Profiles omitted here follow in their usual order. Deleted profiles are removed on read and the next save.
+          items: { type: string, minLength: 1, maxLength: 128 }
+        last_destination: { $ref: '#/components/schemas/DestinationFolder' }
+        destination_favorites:
+          type: array
+          maxItems: 30
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/DestinationFolder' }
+        profile_views:
+          type: object
+          maxProperties: 1000
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [view, sort, direction, folders_first]
+            properties:
+              view: { type: string, enum: [detailed, compact, grid] }
+              sort: { type: string, enum: [name, size, modified, type] }
+              direction: { type: string, enum: [asc, desc] }
+              folders_first: { type: boolean }
+    PreferencesUpdate:
+      type: object
+      additionalProperties: false
+      description: The body is limited to 64 KiB. New fields may be omitted to preserve their stored values. Empty arrays clear saved presets or ordering. Explicit nulls and duplicate keys are rejected.
+      required: [theme, profile_views]
+      properties:
+        theme: { $ref: '#/components/schemas/Preferences/properties/theme' }
+        profile_views: { $ref: '#/components/schemas/Preferences/properties/profile_views' }
+        accent: { $ref: '#/components/schemas/Preferences/properties/accent' }
+        density: { $ref: '#/components/schemas/Preferences/properties/density' }
+        filter_presets: { $ref: '#/components/schemas/Preferences/properties/filter_presets' }
+        profile_order: { $ref: '#/components/schemas/Preferences/properties/profile_order' }
+        last_destination: { $ref: '#/components/schemas/DestinationFolder' }
+        destination_favorites: { $ref: '#/components/schemas/Preferences/properties/destination_favorites' }
+    DestinationFolder:
+      type: object
+      additionalProperties: false
+      required: [destination_id, path]
+      properties:
+        destination_id: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9_-]+$' }
+        path: { type: string, maxLength: 1024, description: Slash-separated folder path relative to the configured destination. Empty means its root. }
+    FilterPreset:
+      type: object
+      additionalProperties: false
+      required: [id, name, filters]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        profile_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Omit for a preset usable across profiles. A scoped preset is removed when its profile no longer exists.
+        filters: { $ref: '#/components/schemas/PresetFilters' }
+    PresetFilters:
+      type: object
+      additionalProperties: false
+      description: Filters use the listing and indexed-search query vocabulary. Size and date bounds are inclusive. Omitted filters impose no constraint; omitted show_folders defaults to true.
+      properties:
+        name: { type: string, maxLength: 512, description: Case-insensitive name query limited to 512 UTF-8 bytes. }
+        category: { type: string, enum: ['', folder, video, image, audio, document, archive, other] }
+        extensions: { type: string, maxLength: 512, description: Comma-separated extensions without dots. Limited to 512 UTF-8 bytes. }
+        min_size: { type: integer, format: int64, minimum: 0 }
+        max_size: { type: integer, format: int64, minimum: 0 }
+        modified_after: { type: string, format: date-time }
+        modified_before: { type: string, format: date-time }
+        show_folders: { type: boolean }
+    BookmarkCreate:
+      type: object
+      additionalProperties: false
+      required: [profile_id, directory_id, name]
+      properties:
+        profile_id: { type: string }
+        directory_id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        position: { type: integer, minimum: 0, default: 0 }
+    Bookmark:
+      type: object
+      required: [id, profile_id, directory_id, name, position]
+      properties:
+        id: { type: string }
+        profile_id: { type: string }
+        directory_id: { type: string }
+        name: { type: string }
+        position: { type: integer }

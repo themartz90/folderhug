@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "HTTP Wrapper browser zoom test",
+  "version": "1.0.0",
+  "description": "Sets native browser zoom in an isolated acceptance-test profile.",
+  "permissions": ["tabs"],
+  "background": { "service_worker": "background.js" }
+}

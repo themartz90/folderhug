@@ -1,0 +1,44 @@
+{
+  "name": "folderhug-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11.5.1 <12"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "svelte-check --tsconfig ./tsconfig.json && npm run api:check",
+    "lint": "eslint .",
+    "test:unit": "vitest run",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:e2e": "playwright test",
+    "api:generate": "node scripts/api-types.mjs",
+    "api:check": "node scripts/api-types.mjs --check"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@types/node": "24.19.0",
+    "eslint": "10.11.0",
+    "eslint-plugin-svelte": "3.23.0",
+    "globals": "17.12.0",
+    "openapi-typescript": "7.13.0",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "vite": "8.3.1",
+    "vitest": "5.0.2",
+    "yaml": "2.9.1"
+  },
+  "dependencies": {
+    "@tabler/icons-svelte-runes": "3.48.0"
+  }
+}
