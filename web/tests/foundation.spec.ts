@@ -31,7 +31,9 @@ test('owner login uses the real session and rejects a wrong password', async ({ 
 test('expired owner access returns to sign in without exposing cached files', async ({ page }) => {
   await openLibrary(page);
   await expireSessions(page.request);
-  await page.getByRole('button', { name: /Refresh folder|Refresh/, exact: true }).click();
+  // A background request may already have returned to sign-in after expiry.
+  await page.getByRole('button', { name: /Refresh folder|Refresh/, exact: true })
+    .evaluateAll((buttons) => buttons.forEach((button) => (button as HTMLButtonElement).click()));
   await expect(page.getByLabel('Owner password', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Files', exact: true })).not.toBeVisible();
   expect((await page.request.get('/api/v1/profiles')).status()).toBe(401);
