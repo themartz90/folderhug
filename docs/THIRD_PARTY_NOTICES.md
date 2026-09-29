@@ -37,6 +37,8 @@ The lockfile also records development tools, including Vite, TypeScript, ESLint,
 
 The app image includes Debian runtime packages such as the CA certificate bundle. Their notices are retained under `/usr/share/doc/` in the image. The optional media image installs Debian bookworm's `ffmpeg=7:5.1.9-0+deb12u1`; its observed configuration enables GPL components, including libx264. The Go worker invokes FFmpeg as a separate process and does not link its libraries. This does not change the licenses or distribution obligations of FFmpeg and its dependencies.
 
-The media image retains Debian copyright files, `/usr/share/http-wrapper/ffmpeg-build.txt`, and `/usr/share/http-wrapper/packages.txt`. The base image and FFmpeg version are pinned; other Debian packages are resolved when the image is built. See [MEDIA_WORKER.md](MEDIA_WORKER.md) for the package selection and source links.
+The media image retains Debian copyright files, `/usr/share/http-wrapper/ffmpeg-build.txt`, and `/usr/share/http-wrapper/packages.txt`. The base image and FFmpeg version are pinned; other Debian packages are resolved when the image is built. See [MEDIA_WORKER.md](MEDIA_WORKER.md) for its runtime limits and isolation.
+
+The release workflow packages notices and installed package inventories in `folderhug-notices-<version>.tar.gz`, with the matching Debian source packages in `folderhug-debian-sources-<version>.tar.gz`. The release's image manifest records the exact app and worker digests. Checksums cover the Compose files, image manifest, notices, and source archive.
 
 If you redistribute a modified image, preserve its notices and provide the corresponding source and license material required by the packages it contains. The Dockerfile alone is not the corresponding source for Debian's binary packages.

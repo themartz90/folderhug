@@ -1,0 +1,144 @@
+name: Build images
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_images:
+        description: Push the tested app and media images to GHCR with main and revision tags
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: image-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main and a passing Checks run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow check.yml --commit "$GITHUB_SHA" --event push \
+            --json status,conclusion,headSha | jq -e --arg sha "$GITHUB_SHA" \
+            'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node scripts/check-public.mjs
+      - name: Build both Linux amd64 images
+        run: |
+          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:build-check .
+          docker build --platform linux/amd64 --target media --build-arg VCS_REF="$GITHUB_SHA" -t folderhug-media:build-check .
+          docker build --platform linux/amd64 --target media-test --build-arg VCS_REF="$GITHUB_SHA" -t folderhug-media:test-check .
+      - name: Check Compose, app startup, and worker integration
+        run: |
+          FOLDERHUG_IMAGE=folderhug:build-check FOLDERHUG_MEDIA_IMAGE=folderhug-media:build-check \
+            docker compose -f compose.yaml -f compose.media.yaml --profile media config --quiet
+          bash scripts/ci-container-smoke.sh folderhug:build-check
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
+            -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures \
+            --entrypoint sh folderhug-media:test-check \
+            -c 'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures && /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'
+
+  publish:
+    if: inputs.publish_images
+    needs: build-and-smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record current package visibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          repo_visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
+          for package in folderhug folderhug-media; do
+            if visibility=$(gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" --jq .visibility 2>"$RUNNER_TEMP/package-error"); then
+              if [[ $repo_visibility == private && $visibility != private ]]; then
+                echo "Refusing to push to a public package while the repository is private." >&2
+                exit 1
+              fi
+              if [[ $repo_visibility == public && $visibility != public ]]; then
+                echo "::warning::$package is $visibility while the repository is public. Pull-based installation needs package access."
+              fi
+            else
+              if ! grep -q 'HTTP 404' "$RUNNER_TEMP/package-error"; then
+                cat "$RUNNER_TEMP/package-error" >&2
+                exit 1
+              fi
+              visibility=missing
+            fi
+            printf '%s=%s\n' "$package" "$visibility" >> "$RUNNER_TEMP/package-visibility"
+          done
+      - name: Rebuild and smoke the exact revision
+        run: |
+          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:publish-check .
+          docker build --platform linux/amd64 --target media --build-arg VCS_REF="$GITHUB_SHA" -t folderhug-media:publish-check .
+          docker build --platform linux/amd64 --target media-test --build-arg VCS_REF="$GITHUB_SHA" -t folderhug-media:test-check .
+          bash scripts/ci-container-smoke.sh folderhug:publish-check
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
+            -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures \
+            --entrypoint sh folderhug-media:test-check \
+            -c 'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures && /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'
+      - name: Push revision and main tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          app="ghcr.io/${GITHUB_REPOSITORY,,}"
+          media="$app-media"
+          docker tag folderhug:publish-check "$app:sha-$GITHUB_SHA"
+          docker tag folderhug-media:publish-check "$media:sha-$GITHUB_SHA"
+          docker push "$app:sha-$GITHUB_SHA"
+          docker push "$media:sha-$GITHUB_SHA"
+          app_digest=$(docker image inspect "$app:sha-$GITHUB_SHA" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$app@sha256:" | head -n 1)
+          media_digest=$(docker image inspect "$media:sha-$GITHUB_SHA" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$media@sha256:" | head -n 1)
+          test -n "$app_digest"
+          test -n "$media_digest"
+          for package in folderhug folderhug-media; do
+            previous=$(sed -n "s/^$package=//p" "$RUNNER_TEMP/package-visibility")
+            current=''
+            for attempt in {1..10}; do
+              if current=$(gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" --jq .visibility 2>/dev/null); then
+                break
+              fi
+              sleep 3
+            done
+            test -n "$current"
+            if [[ $(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility) == private && $current != private ]]; then
+              echo "Package $package is public while the repository is private." >&2
+              exit 1
+            fi
+            if [[ $previous != missing && $current != "$previous" ]]; then
+              echo "Package visibility changed during publication: $package" >&2
+              exit 1
+            fi
+            printf '%s visibility: %s\n' "$package" "$current" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [[ $(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha) == "$GITHUB_SHA" ]]; then
+            docker tag folderhug:publish-check "$app:main"
+            docker tag folderhug-media:publish-check "$media:main"
+            docker push "$app:main"
+            docker push "$media:main"
+            echo 'Updated both main image tags.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Main advanced during this run; revision images were stored and main image tags were left unchanged.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf 'Source: `%s`\nApp: `%s`\nApp digest: `%s`\nMedia: `%s`\nMedia digest: `%s`\nPlatform: `linux/amd64`\n' \
+            "$GITHUB_SHA" "$app:sha-$GITHUB_SHA" "$app_digest" "$media:sha-$GITHUB_SHA" "$media_digest" >> "$GITHUB_STEP_SUMMARY"

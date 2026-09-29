@@ -1,6 +1,8 @@
 name: Prepare draft release
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       version_tag:
@@ -9,96 +11,95 @@ on:
         required: true
 
 concurrency:
-  group: release-preparation-${{ inputs.version_tag }}
+  group: release-preparation-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   validate-tag:
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.tag.outputs.source_sha }}
+      version_tag: ${{ steps.tag.outputs.version_tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Check the explicit tag and main ancestry
+      - name: Check the explicit tag and tested revision
         id: tag
         env:
-          TAG: ${{ inputs.version_tag }}
+          TAG_INPUT: ${{ inputs.version_tag }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = refs/heads/main
-          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
-          if [[ ! $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]; then
+          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]]; then
+            test "$GITHUB_REF" = refs/heads/main
+            tag=$TAG_INPUT
+          else
+            tag=$GITHUB_REF_NAME
+            test "$GITHUB_REF" = "refs/tags/$tag"
+          fi
+          if [[ ! $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]; then
             echo 'Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N.' >&2
             exit 1
           fi
-          git show-ref --tags --verify --quiet "refs/tags/$TAG"
-          sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
-          git merge-base --is-ancestor "$sha" "$GITHUB_SHA"
+          git show-ref --tags --verify --quiet "refs/tags/$tag"
+          sha=$(git rev-parse --verify "refs/tags/$tag^{commit}")
+          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
+          if [[ $GITHUB_EVENT_NAME == push ]]; then
+            test "$sha" = "$GITHUB_SHA"
+          fi
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow check.yml --commit "$sha" --event push --limit 100 \
+            --json status,conclusion,headSha | jq -e --arg sha "$sha" \
+            'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
+          if ! gh run list --repo "$GITHUB_REPOSITORY" --workflow image-build.yml --commit "$sha" --event workflow_dispatch --limit 100 \
+            --json status,conclusion,headSha | jq -e --arg sha "$sha" \
+            'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'; then
+            echo 'Run Build images with publish_images=true for this commit, then retry draft preparation.' >&2
+            exit 1
+          fi
           echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$tag" >> "$GITHUB_OUTPUT"
 
   verify-and-package:
     needs: validate-tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.validate-tag.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: node scripts/check-public.mjs
-      - run: npm ci
-        working-directory: web
-      - run: npm run check
-        working-directory: web
-      - run: npm run lint
-        working-directory: web
-      - run: npm run test:unit
-        working-directory: web
-      - run: npm run build
-        working-directory: web
-      - run: npm audit
-        working-directory: web
-      - run: go test -race ./...
-      - run: go vet ./...
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - run: npx playwright install --with-deps chromium firefox webkit
-        working-directory: web
-      - run: npm run test:e2e
-        working-directory: web
-      - name: Build and smoke the core app
+      - name: Pull the tested images and verify source labels
         env:
+          GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
         run: |
-          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$SOURCE_SHA" -t folderhug:release-check .
-          FOLDERHUG_IMAGE=folderhug:release-check docker compose -f compose.images.yaml config --quiet
-          bash scripts/ci-container-smoke.sh folderhug:release-check
-      - name: Build and test the optional media target
-        run: |
-          docker build --platform linux/amd64 --target media -t folderhug:media-release-check .
-          docker build --platform linux/amd64 --target media-test -t folderhug:media-test-release-check .
-          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
-            -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures \
-            --entrypoint sh folderhug:media-test-release-check \
-            -c 'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures && /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'
-      - name: Package Compose, checksums, and app notices
+          set -euo pipefail
+          app="ghcr.io/${GITHUB_REPOSITORY,,}"
+          media="$app-media"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          for image in "$app" "$media"; do
+            docker pull --platform linux/amd64 "$image:sha-$SOURCE_SHA"
+            test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+            test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+          done
+      - name: Package Compose, checksums, notices, and exact Debian sources
         env:
-          TAG: ${{ inputs.version_tag }}
+          TAG: ${{ needs.validate-tag.outputs.version_tag }}
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
-        run: bash scripts/package-release.sh "$TAG" "$SOURCE_SHA" folderhug:release-check dist
+        run: |
+          app="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$SOURCE_SHA"
+          media="ghcr.io/${GITHUB_REPOSITORY,,}-media:sha-$SOURCE_SHA"
+          bash scripts/package-release.sh "$TAG" "$SOURCE_SHA" "$app" "$media" dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: draft-assets
@@ -114,6 +115,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -123,14 +125,12 @@ jobs:
       - name: Recheck the tag and create a draft only
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.version_tag }}
+          TAG: ${{ needs.validate-tag.outputs.version_tag }}
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = refs/heads/main
-          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
           test "$(git rev-parse --verify "refs/tags/$TAG^{commit}")" = "$SOURCE_SHA"
-          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'A release already exists for this tag; refusing to replace it.' >&2
             exit 1
@@ -139,14 +139,10 @@ jobs:
             cd dist
             sha256sum -c "folderhug-checksums-$TAG.txt"
           )
-          printf 'Source commit: %s\n\nThis draft contains a Compose file, checksums, and app notices. Set FOLDERHUG_IMAGE to an app image built from this commit. Verify image availability, package visibility, and distribution materials before publication.\n' \
-            "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
+          printf 'Source commit: %s\nSource archive: https://github.com/%s/archive/%s.tar.gz\n\nThe image manifest records the exact app and media digests used for these assets. The optional media image contains GPL-enabled FFmpeg. Check the attached package source and copyright materials against the built images before publishing this draft.\n' \
+            "$SOURCE_SHA" "$GITHUB_REPOSITORY" "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
           release_args=(--draft --verify-tag --title "Folderhug $TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
           if [[ $TAG == *-rc.* ]]; then
             release_args+=(--prerelease)
           fi
-          gh release create "$TAG" \
-            "dist/folderhug-compose-$TAG.yaml" \
-            "dist/folderhug-checksums-$TAG.txt" \
-            "dist/folderhug-notices-$TAG.tar.gz" \
-            --repo "$GITHUB_REPOSITORY" "${release_args[@]}"
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" "${release_args[@]}"

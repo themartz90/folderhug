@@ -1,11 +1,11 @@
-name: Promote release image
+name: Promote release images
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: release-image
+  group: release-images
   cancel-in-progress: false
 
 permissions:
@@ -14,23 +14,15 @@ permissions:
   packages: write
 
 jobs:
-  promote-tested-image:
+  promote-tested-images:
     runs-on: ubuntu-latest
     steps:
-      - name: Require completed distribution materials
-        env:
-          RELEASES_ENABLED: ${{ vars.FOLDERHUG_IMAGE_RELEASES_ENABLED }}
-        run: |
-          if [[ "$RELEASES_ENABLED" != true ]]; then
-            echo '::error::Set FOLDERHUG_IMAGE_RELEASES_ENABLED=true only after app image notices and corresponding-source materials are complete.'
-            exit 1
-          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Validate the published tag and candidate run
+      - name: Validate the published tag and tested revision
         id: source
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -52,50 +44,98 @@ jobs:
           sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
           test "$sha" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$sha" refs/remotes/origin/main
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow candidate-image.yml \
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow image-build.yml \
             --commit "$sha" --event workflow_dispatch --limit 100 \
             --json status,conclusion,headSha | jq -e --arg sha "$sha" \
             'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - name: Pull and check the tested core image
+      - name: Verify draft assets and immutable image manifest
+        id: assets
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-        run: |
-          set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
-          docker pull --platform linux/amd64 "$image:sha-$SOURCE_SHA"
-          actual_sha=$(docker image inspect "$image:sha-$SOURCE_SHA" \
-            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
-          test "$actual_sha" = "$SOURCE_SHA"
-          test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
-          echo "Promoting tested source $SOURCE_SHA"
-      - name: Push the version image
-        env:
           TAG: ${{ github.event.release.tag_name }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker tag "$image:sha-$SOURCE_SHA" "$image:$TAG"
-          docker push "$image:$TAG"
-          digest=$(docker image inspect "$image:$TAG" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$image@sha256:" | head -n 1)
-          test -n "$digest"
-          printf 'Source: `%s`\nVersion image: `%s`\nDigest: `%s`\nPlatform: `linux/amd64`\n' \
-            "$SOURCE_SHA" "$image:$TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          asset_dir="$RUNNER_TEMP/folderhug-release-assets"
+          mkdir "$asset_dir"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$asset_dir"
+          for name in \
+            "folderhug-compose-$TAG.yaml" \
+            "folderhug-media-$TAG.yaml" \
+            "folderhug-images-$TAG.json" \
+            "folderhug-notices-$TAG.tar.gz" \
+            "folderhug-debian-sources-$TAG.tar.gz" \
+            "folderhug-checksums-$TAG.txt"; do
+            test -s "$asset_dir/$name"
+          done
+          (
+            cd "$asset_dir"
+            sha256sum -c "folderhug-checksums-$TAG.txt"
+          )
+          manifest="$asset_dir/folderhug-images-$TAG.json"
+          jq -e --arg tag "$TAG" --arg sha "$SOURCE_SHA" \
+            '.schema_version == 1 and .version_tag == $tag and .source_sha == $sha' "$manifest"
+          app_ref=$(jq -r .app_image "$manifest")
+          media_ref=$(jq -r .media_image "$manifest")
+          [[ $app_ref == "ghcr.io/${GITHUB_REPOSITORY,,}@sha256:"* ]]
+          [[ $media_ref == "ghcr.io/${GITHUB_REPOSITORY,,}-media@sha256:"* ]]
+          [[ ${app_ref##*@sha256:} =~ ^[a-f0-9]{64}$ ]]
+          [[ ${media_ref##*@sha256:} =~ ^[a-f0-9]{64}$ ]]
+          echo "app_ref=$app_ref" >> "$GITHUB_OUTPUT"
+          echo "media_ref=$media_ref" >> "$GITHUB_OUTPUT"
+      - name: Pull and verify both tested images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          APP_REF: ${{ steps.assets.outputs.app_ref }}
+          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
+        run: |
+          set -euo pipefail
+          repo_visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          for package in folderhug folderhug-media; do
+            package_visibility=$(gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" --jq .visibility)
+            if [[ $repo_visibility == public && $package_visibility != public ]]; then
+              echo "Public release requires public pull access for $package. Change package visibility yourself before publication." >&2
+              exit 1
+            fi
+          done
+          for ref in "$APP_REF" "$MEDIA_REF"; do
+            docker pull --platform linux/amd64 "$ref"
+            test "$(docker image inspect "$ref" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+            test "$(docker image inspect "$ref" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+          done
+      - name: Push both version images
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          APP_REF: ${{ steps.assets.outputs.app_ref }}
+          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
+        run: |
+          set -euo pipefail
+          app="ghcr.io/${GITHUB_REPOSITORY,,}"
+          media="$app-media"
+          for pair in "$APP_REF $app" "$MEDIA_REF $media"; do
+            read -r ref image <<< "$pair"
+            docker tag "$ref" "$image:$TAG"
+            docker push "$image:$TAG"
+            digest=$(docker image inspect "$image:$TAG" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$image@sha256:" | head -n 1)
+            test -n "$digest"
+            printf '%s: `%s`\nDigest: `%s`\n' "$TAG" "$image:$TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Move latest only for the current stable release
         if: ${{ !github.event.release.prerelease }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          APP_REF: ${{ steps.assets.outputs.app_ref }}
+          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
         run: |
           set -euo pipefail
           latest_tag=''
           for attempt in {1..10}; do
             if ! latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null); then
-              echo 'Could not verify the latest GitHub release; leaving the image latest tag unchanged.'
+              echo 'Could not verify the latest GitHub release; leaving image latest tags unchanged.'
               exit 0
             fi
             if [[ $latest_tag == "$TAG" ]]; then
@@ -104,10 +144,14 @@ jobs:
             sleep 3
           done
           if [[ $latest_tag != "$TAG" ]]; then
-            echo "Latest GitHub release is $latest_tag; leaving the image latest tag unchanged."
+            echo "Latest GitHub release is $latest_tag; leaving image latest tags unchanged."
             exit 0
           fi
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker tag "$image:sha-$SOURCE_SHA" "$image:latest"
-          docker push "$image:latest"
-          echo "Updated $image:latest for $TAG" >> "$GITHUB_STEP_SUMMARY"
+          app="ghcr.io/${GITHUB_REPOSITORY,,}"
+          media="$app-media"
+          for pair in "$APP_REF $app" "$MEDIA_REF $media"; do
+            read -r ref image <<< "$pair"
+            docker tag "$ref" "$image:latest"
+            docker push "$image:latest"
+          done
+          echo "Updated both latest image tags for $TAG." >> "$GITHUB_STEP_SUMMARY"
