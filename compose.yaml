@@ -48,7 +48,7 @@ services:
       - keys:/keys
       - downloads:/downloads
       # Add an existing host folder and set FOLDERHUG_MOUNTED_ROOTS above, as shown in README.md.
-      # - /mnt/Plex:/mnt/Plex:rw
+      # - /mnt/drive:/mnt/drive:rw
       - cache:/cache
     read_only: true
     tmpfs:

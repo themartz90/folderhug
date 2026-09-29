@@ -29,23 +29,23 @@ To build from source, clone the [repository](https://github.com/themartz90/folde
 
 ## Save to a host folder
 
-You can save downloads into an existing folder on your server. For example, to use `/mnt/Plex`, make two edits under `services.app` in `compose.yaml`.
+You can save downloads into an existing folder on your server. For example, to use `/mnt/drive`, make two edits under `services.app` in `compose.yaml`.
 
 Add the folder to the existing `volumes` list, keeping the other entries:
 
 ```yaml
-- /mnt/Plex:/mnt/Plex:rw
+- /mnt/drive:/mnt/drive:rw
 ```
 
 Then replace the existing `FOLDERHUG_MOUNTED_ROOTS` line under `environment`:
 
 ```yaml
-FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"}]'
+FOLDERHUG_MOUNTED_ROOTS: '[{"id":"drive","label":"Drive","path":"/mnt/drive"}]'
 ```
 
-The mount gives the container access to the folder. The setting adds **Plex** to Folderhug's **Save to server** picker. In the mount line, the first path is on your server and the second is inside the container; they can be the same. The JSON `path` must match the second path. Use your own folder instead of `/mnt/Plex`.
+The mount gives the container access to the folder. The setting adds **Drive** to Folderhug's **Save to server** picker. In the mount line, the first path is on your server and the second is inside the container; they can be the same. The JSON `path` must match the second path. Use your own folder instead of `/mnt/drive`.
 
-Run `docker compose up -d` to apply the change, then choose **Plex** when saving a file. The folder must be writable by the container's UID/GID 10001; `:rw` does not change host permissions. Keep the `/downloads` volume too, since downloads use it for temporary storage. See [downloads and mounted folders](docs/DOWNLOADS.md) for multiple folders, missing-path checks, and an optional override file.
+Run `docker compose up -d` to apply the change, then choose **Drive** when saving a file. The folder must be writable by the container's UID/GID 10001; `:rw` does not change host permissions. Keep the `/downloads` volume too, since downloads use it for temporary storage. See [downloads and mounted folders](docs/DOWNLOADS.md) for multiple folders, missing-path checks, and an optional override file.
 
 ## Local development
 

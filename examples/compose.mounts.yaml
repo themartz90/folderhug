@@ -1,10 +1,10 @@
 services:
   app:
     environment:
-      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"drive","label":"Drive","path":"/mnt/drive"}]'
     volumes:
       - type: bind
-        source: /mnt/Plex
-        target: /mnt/Plex
+        source: /mnt/drive
+        target: /mnt/drive
         bind:
           create_host_path: false

@@ -20,14 +20,14 @@ The queue admits at most 1,000 unfinished jobs, including paused and interrupted
 
 The built-in destination ID is `server`, backed by `FOLDERHUG_DOWNLOADS_DIR`. The owner can also configure mounted folders with `FOLDERHUG_MOUNTED_ROOTS`. A job then supplies a configured destination ID and an existing folder path relative to that mount. API tokens remain limited to `server`. The app does not accept an arbitrary host path in a download request. Download filenames are normalized for Windows and Linux, and mounted files keep both names when a filename already exists.
 
-Configure a host folder with a normal Compose bind mount, such as `- /mnt/Plex:/mnt/Plex:rw`, then list its container path in `FOLDERHUG_MOUNTED_ROOTS`. The [README](../README.md#save-to-a-host-folder) shows both edits in the main Compose file. The mount makes the folder accessible to the container; the setting gives it a name in the folder picker.
+Configure a host folder with a normal Compose bind mount, such as `- /mnt/drive:/mnt/drive:rw`, then list its container path in `FOLDERHUG_MOUNTED_ROOTS`. The [README](../README.md#save-to-a-host-folder) shows both edits in the main Compose file. The mount makes the folder accessible to the container; the setting gives it a name in the folder picker.
 
-The first mount path is on the host, and the second is inside the container. They can be identical. If you prefer `/mnt/Plex:/media:rw`, use `/media` as the JSON `path`. The `label` is shown in the app. Keep each `id` unique and stable, since saved jobs and favorites refer to it.
+The first mount path is on the host, and the second is inside the container. They can be identical. If you prefer `/mnt/drive:/media:rw`, use `/media` as the JSON `path`. The `label` is shown in the app. Keep each `id` unique and stable, since saved jobs and favorites refer to it.
 
 For multiple folders, add a mount for each one and list them in the same JSON array:
 
 ```yaml
-FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"},{"id":"music","label":"Music","path":"/mnt/Music"}]'
+FOLDERHUG_MOUNTED_ROOTS: '[{"id":"drive","label":"Drive","path":"/mnt/drive"},{"id":"music","label":"Music","path":"/mnt/Music"}]'
 ```
 
 Each host folder needs write permission for the container's UID/GID 10001. The `:rw` option permits writes through the mount, but does not change host filesystem permissions. For an existing library, grant access to the intended folder without changing ownership or permissions across the whole tree.
@@ -40,16 +40,16 @@ You can keep mounts in a separate file if you prefer. The included [mount overri
 services:
   app:
     environment:
-      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"drive","label":"Drive","path":"/mnt/drive"}]'
     volumes:
       - type: bind
-        source: /mnt/Plex
-        target: /mnt/Plex
+        source: /mnt/drive
+        target: /mnt/drive
         bind:
           create_host_path: false
 ```
 
-Replace `/mnt/Plex` with your existing folder, keeping `target` and the JSON `path` equal. Save the example as `compose.mounts.yaml` beside `compose.yaml`, then run `docker compose -f compose.yaml -f compose.mounts.yaml up -d`. Include both files in later startup and update commands. For a source build, include `compose.build.yaml` before the mount override. Keep any `-p` project name already in use.
+Replace `/mnt/drive` with your existing folder, keeping `target` and the JSON `path` equal. Save the example as `compose.mounts.yaml` beside `compose.yaml`, then run `docker compose -f compose.yaml -f compose.mounts.yaml up -d`. Include both files in later startup and update commands. For a source build, include `compose.build.yaml` before the mount override. Keep any `-p` project name already in use.
 
 ### Storage behavior
 
