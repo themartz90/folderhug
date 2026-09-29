@@ -1,5 +1,11 @@
 # Folderhug
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.jpg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.jpg">
+  <img alt="Folderhug, a red panda holding a folder" src="docs/assets/banner-light.jpg" width="1200">
+</picture>
+
 Folderhug is a self-hosted file explorer for HTTP directory listings, such as a seedbox's download folder. Add your sources, browse and search their folders, preview supported media, and download files to your browser or server. Folderhug leaves the source files unchanged.
 
 You can switch between list and grid views, filter a folder, save filter presets, pin folders, and use Find files to search the current folder or its subfolders. Server downloads run in a persistent queue. Folderhug has one owner account and scoped API tokens for other clients. Image thumbnails work in the app; video posters use an optional isolated worker. Playback depends on your browser and the file's codec.
