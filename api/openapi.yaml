@@ -50,7 +50,7 @@ info:
     is excluded. Each phase has a matching deadline. Repeated crashes do not reset the budget.
 
     Errors use code, message and request_id. Source authentication failures return 502
-    upstream_auth_required, never the wrapper's 401 unauthenticated. Messages omit source
+    upstream_auth_required, never Folderhug's 401 unauthenticated. Messages omit source
     response bodies and credentials. Every response carries X-Request-ID.
 servers:
   - url: /api/v1
@@ -684,7 +684,7 @@ paths:
         default: { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
-    owner_session: { type: apiKey, in: cookie, name: http_wrapper_session }
+    owner_session: { type: apiKey, in: cookie, name: folderhug_session }
     bearer_token: { type: http, scheme: bearer }
   parameters:
     ID: { name: id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }

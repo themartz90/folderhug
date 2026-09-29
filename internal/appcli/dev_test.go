@@ -1,4 +1,4 @@
-package main
+package appcli
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/themartz90/folderhug/internal/auth"
 	"github.com/themartz90/folderhug/internal/config"
+	"github.com/themartz90/folderhug/internal/httpapi"
 	"github.com/themartz90/folderhug/internal/store"
 )
 
@@ -78,7 +79,7 @@ func TestDevSessionPreservesKeyAndFailsWhenLost(t *testing.T) {
 
 func TestDevHandlerRejectsRemoteAndCrossOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("http_wrapper_session")
+		c, err := r.Cookie(httpapi.SessionCookieName)
 		if err != nil || c.Value != "local-session" {
 			t.Error("missing development session")
 		}

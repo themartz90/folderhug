@@ -27,6 +27,7 @@
   import Dialog from './lib/ui/Dialog.svelte';
   import Icon from './lib/ui/Icon.svelte';
   import { rememberOpener, clearRememberedFocus } from './lib/ui/focus';
+  import { readStoredValue, removeStoredValue, writeStoredValue } from './lib/storage';
   let authenticated = $state(false);
   let starting = $state(true);
   let password = $state('');
@@ -181,7 +182,7 @@
     find = null;
     findScan = null;
     findMissing = false;
-    try { sessionStorage.removeItem('http-wrapper.find'); } catch { /* Storage is optional. */ }
+    try { removeStoredValue(sessionStorage, 'find'); } catch { /* Storage is optional. */ }
   }
   function tell(message: string) {
     notice = message;
@@ -198,7 +199,7 @@
     status = null;
     find = null;
     findScan = null;
-    try { sessionStorage.removeItem('http-wrapper.find'); } catch { /* Storage is optional. */ }
+    try { removeStoredValue(sessionStorage, 'find'); } catch { /* Storage is optional. */ }
     preferences = {
       ...preferences,
       profile_views: {},
@@ -267,7 +268,7 @@
       if (!route.profile && profiles.length) {
         let saved: { profile?: string; directory?: string } = {};
         try {
-          saved = JSON.parse(localStorage.getItem('http-wrapper.location') ?? '{}');
+          saved = JSON.parse(readStoredValue(localStorage, 'location') ?? '{}');
         } catch {
           /* Storage may be disabled. */
         }
@@ -306,8 +307,9 @@
     drawer = false;
     if (next.page === 'files')
       try {
-        localStorage.setItem(
-          'http-wrapper.location',
+        writeStoredValue(
+          localStorage,
+          'location',
           JSON.stringify({ profile: next.profile, directory: next.directory }),
         );
       } catch {
@@ -425,14 +427,14 @@
         if (!(e instanceof ApiError && e.code === 'invalid_state')) tell(errorMessage(e));
       });
     }
-    try { sessionStorage.setItem('http-wrapper.find', JSON.stringify(find)); } catch { /* Storage is optional. */ }
+    try { writeStoredValue(sessionStorage, 'find', JSON.stringify(find)); } catch { /* Storage is optional. */ }
     navigate({ ...route, page: 'search', profile: scan.profile_id, directory: scan.directory_id, scroll: 0 });
     revision++;
   }
   function saveFindFilters(types: FindRun['types'], query: string) {
     if (!find) return;
     find = { ...find, types, query };
-    try { sessionStorage.setItem('http-wrapper.find', JSON.stringify(find)); } catch { /* Storage is optional. */ }
+    try { writeStoredValue(sessionStorage, 'find', JSON.stringify(find)); } catch { /* Storage is optional. */ }
   }
   async function logout() {
     try {

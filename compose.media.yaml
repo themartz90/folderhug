@@ -1,8 +1,8 @@
 services:
   app:
     environment:
-      HTTPWRAPPER_MEDIA_SOCKET: /broker/media.sock
-      HTTPWRAPPER_WORKER_KEY: /worker-key/worker.key
+      FOLDERHUG_MEDIA_SOCKET: /broker/media.sock
+      FOLDERHUG_WORKER_KEY: /worker-key/worker.key
     volumes:
       - broker:/broker
       - worker-key:/worker-key:ro
@@ -10,8 +10,8 @@ services:
     profiles: [media]
     image: ${FOLDERHUG_MEDIA_IMAGE:-ghcr.io/themartz90/folderhug-media:latest}
     environment:
-      HTTPWRAPPER_MEDIA_SOCKET: /broker/media.sock
-      HTTPWRAPPER_WORKER_KEY: /worker-key/worker.key
+      FOLDERHUG_MEDIA_SOCKET: /broker/media.sock
+      FOLDERHUG_WORKER_KEY: /worker-key/worker.key
     volumes:
       - broker:/broker:ro
       - worker-key:/worker-key:ro

@@ -158,6 +158,7 @@ func (m *Mount) Prepare(ctx context.Context, folder, id, desired string, src *os
 			root.Close()
 		}
 	}()
+	// Incomplete mounted copies use this name across restart recovery and cleanup.
 	temp := ".http-wrapper-" + id + ".part"
 	if part, e := root.Lstat(temp); e == nil {
 		if !part.Mode().IsRegular() {

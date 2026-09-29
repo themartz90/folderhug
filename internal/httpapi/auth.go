@@ -25,7 +25,8 @@ import (
 	"github.com/themartz90/folderhug/internal/upstream"
 )
 
-const cookieName = "http_wrapper_session"
+const SessionCookieName = "folderhug_session"
+const legacySessionCookieName = "http_wrapper_session"
 
 type loginAttempt struct {
 	count int
@@ -58,7 +59,9 @@ func decode(w http.ResponseWriter, r *http.Request, out any) bool {
 func (s *Server) authorized(owner bool, scope string, next func(http.ResponseWriter, *http.Request, auth.Principal)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie := ""
-		if c, err := r.Cookie(cookieName); err == nil {
+		if c, err := r.Cookie(SessionCookieName); err == nil {
+			cookie = c.Value
+		} else if c, err := r.Cookie(legacySessionCookieName); err == nil {
 			cookie = c.Value
 		}
 		bearer := ""
@@ -182,7 +185,8 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 		rateMu.Lock()
 		delete(attempts, ip)
 		rateMu.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.ExpiresAt})
+		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.ExpiresAt})
+		http.SetCookie(w, &http.Cookie{Name: legacySessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		writeJSON(w, 200, session)
 	})
 	mux.HandleFunc("GET /api/v1/auth/session", s.authorized(true, "", func(w http.ResponseWriter, r *http.Request, p auth.Principal) { writeJSON(w, 200, p.Session()) }))
@@ -192,7 +196,9 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			return
 		}
 		s.Profiles.ClearPrincipal(profiles.LeaseID(p))
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		for _, name := range []string{SessionCookieName, legacySessionCookieName} {
+			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		}
 		w.WriteHeader(204)
 	}))
 	s.profileRoutes(mux)

@@ -93,6 +93,21 @@ jobs:
       - run: docker compose -f compose.yaml -f compose.media.yaml --profile media config --quiet
       - run: docker compose -f compose.yaml -f compose.build.yaml config --quiet
       - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media config --quiet
+      - name: Check Compose setting compatibility
+        shell: bash
+        run: |
+          HTTPWRAPPER_PORT=18080 HTTPWRAPPER_PUBLIC_URL=http://localhost:18080 HTTPWRAPPER_MOUNTED_ROOTS='[{"id":"old"}]' \
+            docker compose --env-file /dev/null config --format json | jq -e '
+              .name == "http-wrapper" and
+              .services.app.ports[0].published == "18080" and
+              .services.app.environment.FOLDERHUG_PUBLIC_URL == "http://localhost:18080" and
+              (.services.app.environment.FOLDERHUG_MOUNTED_ROOTS | fromjson | .[0].id == "old")'
+          FOLDERHUG_PORT=18081 FOLDERHUG_PUBLIC_URL=http://localhost:18081 FOLDERHUG_MOUNTED_ROOTS='[]' \
+            HTTPWRAPPER_PORT=18080 HTTPWRAPPER_PUBLIC_URL=http://localhost:18080 HTTPWRAPPER_MOUNTED_ROOTS='[{"id":"old"}]' \
+            docker compose --env-file /dev/null config --format json | jq -e '
+              .services.app.ports[0].published == "18081" and
+              .services.app.environment.FOLDERHUG_PUBLIC_URL == "http://localhost:18081" and
+              .services.app.environment.FOLDERHUG_MOUNTED_ROOTS == "[]"'
       - run: docker compose -f compose.yaml -f compose.build.yaml build app
       - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media build media
       - run: docker build --platform linux/amd64 --target app -t folderhug:ci .

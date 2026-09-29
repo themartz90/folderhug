@@ -1,7 +1,7 @@
 services:
   app:
     environment:
-      HTTPWRAPPER_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
     volumes:
       - type: bind
         source: /srv/media

@@ -1,4 +1,4 @@
-package main
+package appcli
 
 import (
 	"bufio"
@@ -20,7 +20,7 @@ import (
 func configureOwner(ctx context.Context, command string, args []string, cfg config.Config, db *store.Store, owner *auth.Service) error {
 	stdin := len(args) == 1 && args[0] == "--password-stdin"
 	if len(args) > 0 && !stdin {
-		return fmt.Errorf("usage: http-wrapper %s [--password-stdin]", command)
+		return fmt.Errorf("usage: folderhug %s [--password-stdin]", command)
 	}
 	var count int
 	if err := db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM owner_auth").Scan(&count); err != nil {

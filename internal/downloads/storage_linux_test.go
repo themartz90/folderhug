@@ -16,8 +16,8 @@ import (
 
 func storageFailureOptIn(t *testing.T) {
 	t.Helper()
-	if os.Getenv("HTTPWRAPPER_STORAGE_FAILURES") != "1" {
-		t.Skip("set HTTPWRAPPER_STORAGE_FAILURES=1 in an isolated non-root container")
+	if os.Getenv("FOLDERHUG_STORAGE_FAILURES") != "1" && os.Getenv("HTTPWRAPPER_STORAGE_FAILURES") != "1" {
+		t.Skip("set FOLDERHUG_STORAGE_FAILURES=1 in an isolated non-root container")
 	}
 	if os.Geteuid() == 0 {
 		t.Fatal("storage failure acceptance requires a non-root user")

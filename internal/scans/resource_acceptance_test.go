@@ -12,8 +12,8 @@ import (
 )
 
 func TestResourceScan100000IdleRSS(t *testing.T) {
-	if os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1" || runtime.GOOS != "linux" {
-		t.Skip("set HTTPWRAPPER_RESOURCE_ACCEPTANCE=1 on Linux for procfs resource measurements")
+	if (os.Getenv("FOLDERHUG_RESOURCE_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1") || runtime.GOOS != "linux" {
+		t.Skip("set FOLDERHUG_RESOURCE_ACCEPTANCE=1 on Linux for procfs resource measurements")
 	}
 	dirs := map[string][]string{"": {}}
 	for folder := range 4 {

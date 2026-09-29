@@ -38,7 +38,7 @@ func newSource() *source {
 	_ = png.Encode(&pngData, img)
 	_ = jpeg.Encode(&jpegData, img, &jpeg.Options{Quality: 80})
 	files := map[string]testfixture.File{
-		"/library/readme.txt":                  {Data: []byte("Synthetic HTTP Wrapper browser fixture.\n"), ContentType: "text/plain"},
+		"/library/readme.txt":                  {Data: []byte("Synthetic Folderhug browser fixture.\n"), ContentType: "text/plain"},
 		"/library/Media/mountain.png":          {Data: pngData.Bytes(), ContentType: "image/png"},
 		"/library/Media/sunset.jpg":            {Data: jpegData.Bytes(), ContentType: "image/jpeg"},
 		"/library/Media/unsupported-video.mp4": {Data: []byte("synthetic unsupported video bytes"), ContentType: "video/mp4"},

@@ -14,6 +14,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
     go vet ./...
     if ($LASTEXITCODE -ne 0) { throw 'Go vet failed' }
-    go build -o bin/http-wrapper.exe ./cmd/http-wrapper
+    go build -o bin/folderhug.exe ./cmd/folderhug
     if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
 } finally { Pop-Location }

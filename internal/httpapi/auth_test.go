@@ -41,7 +41,7 @@ func newAuthFixture(t *testing.T, scheme string) *authFixture {
 	if err := authentication.Setup(context.Background(), ownerPassword); err != nil {
 		t.Fatal(err)
 	}
-	origin := scheme + "://wrapper.example.test"
+	origin := scheme + "://folderhug.example.test"
 	publicURL, err := url.Parse(origin)
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +81,8 @@ func (f *authFixture) login(t *testing.T) (*http.Cookie, auth.Session) {
 	w := f.request("POST", "/api/v1/auth/login", `{"password":"`+ownerPassword+`"}`, nil, "", nil)
 	requireStatus(t, w, 200)
 	cookies := w.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("expected session cookie, got %d", len(cookies))
+	if len(cookies) != 2 || cookies[0].Name != SessionCookieName || cookies[1].Name != legacySessionCookieName || cookies[1].MaxAge != -1 {
+		t.Fatalf("expected new session cookie and legacy cookie removal, got %+v", cookies)
 	}
 	var session auth.Session
 	if err := json.Unmarshal(w.Body.Bytes(), &session); err != nil {
@@ -112,7 +112,7 @@ func TestLoginCookieFlagsAndSession(t *testing.T) {
 		t.Run(scheme, func(t *testing.T) {
 			f := newAuthFixture(t, scheme)
 			cookie, session := f.login(t)
-			if !cookie.HttpOnly || cookie.Secure != (scheme == "https") || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.Domain != "" || cookie.Value == "" {
+			if cookie.Name != SessionCookieName || !cookie.HttpOnly || cookie.Secure != (scheme == "https") || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.Domain != "" || cookie.Value == "" {
 				t.Fatal("unsafe session cookie flags")
 			}
 			if !session.Authenticated || session.CSRFToken == "" || !session.ExpiresAt.After(time.Now()) {
@@ -137,7 +137,7 @@ func TestHostOriginAndCSRFGuards(t *testing.T) {
 	for _, headers := range []map[string]string{{"Origin": "https://attacker.example.test"}, {"Origin": ""}} {
 		requireStatus(t, f.request("POST", "/api/v1/auth/login", `{"password":"`+ownerPassword+`"}`, nil, "", headers), 403)
 	}
-	requireStatus(t, f.request("GET", "/api/v1/auth/session", "", cookie, "", map[string]string{"Host": "attacker.example.test", "X-Forwarded-Host": "wrapper.example.test", "Forwarded": "host=wrapper.example.test;proto=https"}), 421)
+	requireStatus(t, f.request("GET", "/api/v1/auth/session", "", cookie, "", map[string]string{"Host": "attacker.example.test", "X-Forwarded-Host": "folderhug.example.test", "Forwarded": "host=folderhug.example.test;proto=https"}), 421)
 	for _, tc := range []struct {
 		csrf    string
 		headers map[string]string
@@ -147,10 +147,28 @@ func TestHostOriginAndCSRFGuards(t *testing.T) {
 	}
 	w := f.request("POST", "/api/v1/auth/logout", "", cookie, session.CSRFToken, nil)
 	requireStatus(t, w, 204)
-	if cookies := w.Result().Cookies(); len(cookies) != 1 || cookies[0].MaxAge != -1 || !cookies[0].HttpOnly || !cookies[0].Secure {
-		t.Fatal("logout did not expire protected cookie")
+	if cookies := w.Result().Cookies(); len(cookies) != 2 || cookies[0].Name != SessionCookieName || cookies[1].Name != legacySessionCookieName || cookies[0].MaxAge != -1 || cookies[1].MaxAge != -1 || !cookies[0].HttpOnly || !cookies[1].HttpOnly || !cookies[0].Secure || !cookies[1].Secure {
+		t.Fatal("logout did not expire both protected session cookies")
 	}
 	requireStatus(t, f.request("GET", "/api/v1/auth/session", "", cookie, "", nil), 401)
+}
+
+func TestLegacySessionCookieTransition(t *testing.T) {
+	f := newAuthFixture(t, "https")
+	cookie, session := f.login(t)
+	legacy := *cookie
+	legacy.Name = legacySessionCookieName
+	requireStatus(t, f.request("GET", "/api/v1/auth/session", "", &legacy, "", nil), 200)
+
+	r := httptest.NewRequest("GET", f.origin+"/api/v1/auth/session", nil)
+	r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "invalid-session"})
+	r.AddCookie(&legacy)
+	w := httptest.NewRecorder()
+	f.handler.ServeHTTP(w, r)
+	requireStatus(t, w, 401)
+
+	requireStatus(t, f.request("POST", "/api/v1/auth/logout", "", &legacy, session.CSRFToken, nil), 204)
+	requireStatus(t, f.request("GET", "/api/v1/auth/session", "", &legacy, "", nil), 401)
 }
 
 func TestMalformedBearerNeverFallsBackToCookie(t *testing.T) {
@@ -183,7 +201,7 @@ func TestLoginThrottleIgnoresUntrustedForwardedHeaders(t *testing.T) {
 	fresh := newAuthFixture(t, "http")
 	w = fresh.request("POST", "/api/v1/auth/login", `{"password":"`+ownerPassword+`"}`, nil, "", map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-Host": "attacker.example.test", "Forwarded": "host=attacker.example.test;proto=https"})
 	requireStatus(t, w, 200)
-	if cookies := w.Result().Cookies(); len(cookies) != 1 || cookies[0].Secure {
+	if cookies := w.Result().Cookies(); len(cookies) != 2 || cookies[0].Secure || cookies[1].Secure {
 		t.Fatal("untrusted forwarded proto changed cookie policy")
 	}
 }

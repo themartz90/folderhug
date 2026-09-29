@@ -22,7 +22,7 @@ type crashMarker struct {
 }
 
 func TestAbruptScanRestart(t *testing.T) {
-	if os.Getenv("HTTPWRAPPER_SCAN_CRASH_CHILD") == "1" {
+	if os.Getenv("FOLDERHUG_SCAN_CRASH_CHILD") == "1" {
 		f := setup(t, map[string][]string{"": {"root.txt", "nested/"}, "nested/": {"child.txt"}})
 		f.source.block = "nested/"
 		start(t, f)
@@ -34,7 +34,7 @@ func TestAbruptScanRestart(t *testing.T) {
 			}
 			if j.DirectoriesVisited == 1 && j.ElapsedSeconds >= 30 {
 				marker, _ := json.Marshal(crashMarker{f.directory, f.profile.ID, j.ID, j.ElapsedSeconds})
-				if err = os.WriteFile(os.Getenv("HTTPWRAPPER_SCAN_CRASH_MARKER"), marker, 0600); err != nil {
+				if err = os.WriteFile(os.Getenv("FOLDERHUG_SCAN_CRASH_MARKER"), marker, 0600); err != nil {
 					t.Fatal(err)
 				}
 				select {}
@@ -43,8 +43,8 @@ func TestAbruptScanRestart(t *testing.T) {
 		}
 		t.Fatal("child did not reach the reserved fetch")
 	}
-	if runtime.GOOS != "linux" || os.Getenv("HTTPWRAPPER_SCAN_CRASH_ACCEPTANCE") != "1" {
-		t.Skip("set HTTPWRAPPER_SCAN_CRASH_ACCEPTANCE=1 on Linux for a disposable abrupt process stop")
+	if runtime.GOOS != "linux" || (os.Getenv("FOLDERHUG_SCAN_CRASH_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_SCAN_CRASH_ACCEPTANCE") != "1") {
+		t.Skip("set FOLDERHUG_SCAN_CRASH_ACCEPTANCE=1 on Linux for a disposable abrupt process stop")
 	}
 	temp := t.TempDir()
 	markerPath := filepath.Join(temp, "marker.json")
@@ -53,7 +53,7 @@ func TestAbruptScanRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := exec.Command(executable, "-test.run=^TestAbruptScanRestart$", "-test.timeout=20s")
-	command.Env = append(os.Environ(), "TMPDIR="+temp, "HTTPWRAPPER_SCAN_CRASH_CHILD=1", "HTTPWRAPPER_SCAN_CRASH_MARKER="+markerPath)
+	command.Env = append(os.Environ(), "TMPDIR="+temp, "FOLDERHUG_SCAN_CRASH_CHILD=1", "FOLDERHUG_SCAN_CRASH_MARKER="+markerPath)
 	if err = command.Start(); err != nil {
 		t.Fatal(err)
 	}

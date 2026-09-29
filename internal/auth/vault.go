@@ -11,6 +11,9 @@ import (
 var ErrKey = errors.New("credential key is unavailable or invalid; restore the original key")
 var ErrCiphertext = errors.New("credentials cannot be decrypted; restore the original key or re-enter credentials")
 
+// Existing ciphertext uses this AAD. Changing it would make stored credentials unreadable.
+const credentialAADPrefix = "http-wrapper:credentials:v1:"
+
 type Vault struct{ aead cipher.AEAD }
 
 func vaultFromKey(key []byte) (*Vault, error) {
@@ -70,7 +73,7 @@ func (v *Vault) Seal(profileID string, plain []byte) ([]byte, error) {
 	}
 	nonce := randomBytes(v.aead.NonceSize())
 	envelope := append([]byte{1}, nonce...)
-	return v.aead.Seal(envelope, nonce, plain, []byte("http-wrapper:credentials:v1:"+profileID)), nil
+	return v.aead.Seal(envelope, nonce, plain, []byte(credentialAADPrefix+profileID)), nil
 }
 
 func (v *Vault) Open(profileID string, encrypted []byte) ([]byte, error) {
@@ -80,7 +83,7 @@ func (v *Vault) Open(profileID string, encrypted []byte) ([]byte, error) {
 	if profileID == "" || len(encrypted) < 1+v.aead.NonceSize()+v.aead.Overhead() || encrypted[0] != 1 {
 		return nil, ErrCiphertext
 	}
-	plain, err := v.aead.Open(nil, encrypted[1:1+v.aead.NonceSize()], encrypted[1+v.aead.NonceSize():], []byte("http-wrapper:credentials:v1:"+profileID))
+	plain, err := v.aead.Open(nil, encrypted[1:1+v.aead.NonceSize()], encrypted[1+v.aead.NonceSize():], []byte(credentialAADPrefix+profileID))
 	if err != nil {
 		return nil, ErrCiphertext
 	}

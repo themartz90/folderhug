@@ -34,7 +34,7 @@ The default server destination is the `/downloads` volume. To let the owner choo
 services:
   app:
     environment:
-      HTTPWRAPPER_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
     volumes:
       - type: bind
         source: /srv/media
@@ -54,10 +54,10 @@ cd web
 npm ci
 npm run build
 cd ..
-go run ./cmd/http-wrapper dev
+go run ./cmd/folderhug dev
 ```
 
-Open `http://localhost:8080` and add a directory listing URL. Development mode signs you in automatically, uses separate state in `.local/dev`, and listens on loopback only. For an owner account outside development mode, use `go run ./cmd/http-wrapper setup` followed by `go run ./cmd/http-wrapper`. Setup asks for a password of at least 12 characters. Keep its credential key with your backups; losing it prevents access to remembered source passwords.
+Open `http://localhost:8080` and add a directory listing URL. Development mode signs you in automatically, uses separate state in `.local/dev`, and listens on loopback only. For an owner account outside development mode, use `go run ./cmd/folderhug setup` followed by `go run ./cmd/folderhug`. Setup asks for a password of at least 12 characters. Keep its credential key with your backups; losing it prevents access to remembered source passwords.
 
 For hot reload, tests, and browser fixtures, see [Windows development](docs/DEVELOPMENT.md). Native development does not need Docker or WSL.
 
@@ -70,7 +70,7 @@ For hot reload, tests, and browser fixtures, see [Windows development](docs/DEVE
 - Temporary source credentials stay in server memory. Remembered credentials are encrypted with a key stored outside the database.
 - There are no uploads, upstream rename/delete actions, public shares, multiple user accounts, telemetry, or transcoding.
 
-Read [source compatibility](docs/COMPATIBILITY.md), [downloads and mounted folders](docs/DOWNLOADS.md), and [API examples](docs/API_USAGE.md) for details. Runtime settings retain the `HTTPWRAPPER_` prefix.
+Read [source compatibility](docs/COMPATIBILITY.md), [downloads and mounted folders](docs/DOWNLOADS.md), and [API examples](docs/API_USAGE.md) for details. Runtime settings use the `FOLDERHUG_` prefix.
 
 ## License
 

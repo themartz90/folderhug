@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const temporary = await mkdtemp(join(tmpdir(), 'http-wrapper-web-build-'));
+const temporary = await mkdtemp(join(tmpdir(), 'folderhug-web-build-'));
 const binary = join(temporary, process.platform === 'win32' ? 'web-fixture.exe' : 'web-fixture');
 let child;
 let stopping = false;

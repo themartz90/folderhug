@@ -81,7 +81,7 @@ docker run --rm --network none --entrypoint dpkg-query "$app_image" \
 docker run --rm --network none --entrypoint dpkg-query "$media_image" \
   -W > "$output_dir/notices/inventories/media-debian-packages.txt"
 docker run --rm --network none --entrypoint cat "$media_image" \
-  /usr/share/http-wrapper/ffmpeg-build.txt > "$output_dir/notices/inventories/ffmpeg-build.txt"
+  /usr/share/folderhug/ffmpeg-build.txt > "$output_dir/notices/inventories/ffmpeg-build.txt"
 docker run --rm --network none --entrypoint tar "$app_image" \
   -C /usr/share/doc -cf - . | tar -C "$output_dir/notices/app-image/usr/share/doc" -xf -
 docker run --rm --network none --entrypoint tar "$media_image" \

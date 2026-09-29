@@ -18,15 +18,15 @@ The queue admits at most 1,000 unfinished jobs, including paused and interrupted
 
 ## Storage limits
 
-The built-in destination ID is `server`, backed by `HTTPWRAPPER_DOWNLOADS_DIR`. The owner can also configure mounted folders with `HTTPWRAPPER_MOUNTED_ROOTS`. A job then supplies a configured destination ID and an existing folder path relative to that mount. API tokens remain limited to `server`. The app does not accept an arbitrary host path in a download request. Download filenames are normalized for Windows and Linux, and mounted files keep both names when a filename already exists.
+The built-in destination ID is `server`, backed by `FOLDERHUG_DOWNLOADS_DIR`. The owner can also configure mounted folders with `FOLDERHUG_MOUNTED_ROOTS`. A job then supplies a configured destination ID and an existing folder path relative to that mount. API tokens remain limited to `server`. The app does not accept an arbitrary host path in a download request. Download filenames are normalized for Windows and Linux, and mounted files keep both names when a filename already exists.
 
-Configure mounts in Compose by adding each writable host folder to the app service's `volumes`, then list the matching container paths in `HTTPWRAPPER_MOUNTED_ROOTS`. The included [mount override](../examples/compose.mounts.yaml) is a complete example for a host directory at `/srv/media`:
+Configure mounts in Compose by adding each writable host folder to the app service's `volumes`, then list the matching container paths in `FOLDERHUG_MOUNTED_ROOTS`. The included [mount override](../examples/compose.mounts.yaml) is a complete example for a host directory at `/srv/media`:
 
 ```yaml
 services:
   app:
     environment:
-      HTTPWRAPPER_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
     volumes:
       - type: bind
         source: /srv/media
@@ -55,10 +55,10 @@ Copying to a mounted folder leaves the other queue controls available. Pause or 
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HTTPWRAPPER_DOWNLOAD_BUDGET_BYTES` | 107374182400 (100 GiB) | Logical storage budget shared by queued transfers and existing local files. |
-| `HTTPWRAPPER_DOWNLOAD_RESERVE_BYTES` | 5368709120 (5 GiB) | Free disk space to leave available. Zero disables this reserve. |
-| `HTTPWRAPPER_DOWNLOAD_UNKNOWN_BYTES` | 21474836480 (20 GiB) | Maximum size reserved for a response whose length is unknown. |
-| `HTTPWRAPPER_STREAM_TIMEOUT` | 24h | Request timeout; accepts durations from 1s through 168h. |
+| `FOLDERHUG_DOWNLOAD_BUDGET_BYTES` | 107374182400 (100 GiB) | Logical storage budget shared by queued transfers and existing local files. |
+| `FOLDERHUG_DOWNLOAD_RESERVE_BYTES` | 5368709120 (5 GiB) | Free disk space to leave available. Zero disables this reserve. |
+| `FOLDERHUG_DOWNLOAD_UNKNOWN_BYTES` | 21474836480 (20 GiB) | Maximum size reserved for a response whose length is unknown. |
+| `FOLDERHUG_STREAM_TIMEOUT` | 24h | Request timeout; accepts durations from 1s through 168h. |
 
 Reservations include unwritten portions of segmented files. Unknown-size downloads need enough space for their configured cap before starting. Set that cap at or below the total storage budget if you reduce the defaults. Another application can still consume disk space after a check; write errors leave an incomplete job, not a successful file.
 

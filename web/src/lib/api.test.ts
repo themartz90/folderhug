@@ -27,7 +27,7 @@ describe('API client', () => {
     expect(options.headers.get('Idempotency-Key')).toBe('operation');
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-  it('expires the owner session only for wrapper authentication errors', async () => {
+  it('expires the owner session only for Folderhug authentication errors', async () => {
     const onExpired = vi.fn();
     setSession(null, onExpired);
     vi.stubGlobal(

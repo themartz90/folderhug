@@ -19,6 +19,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import FileMark from '../ui/FileMark.svelte';
   import Icon from '../ui/Icon.svelte';
+  import { readStoredValue, writeStoredValue } from '../storage';
   let {
     profile,
     profileRevision,
@@ -64,7 +65,7 @@
   let gridSize = $state<'small' | 'medium' | 'large'>('medium');
   onMount(() => {
     try {
-      const saved = localStorage.getItem('httpwrapper.grid-size');
+      const saved = readStoredValue(localStorage, 'gridSize');
       if (saved === 'small' || saved === 'medium' || saved === 'large') gridSize = saved;
     } catch {
       /* Appearance still works when browser storage is unavailable. */
@@ -475,7 +476,7 @@
             onchange={(event) => {
               gridSize = event.currentTarget.value as typeof gridSize;
               try {
-                localStorage.setItem('httpwrapper.grid-size', gridSize);
+                writeStoredValue(localStorage, 'gridSize', gridSize);
               } catch {
                 /* Keep the current choice for this view. */
               }

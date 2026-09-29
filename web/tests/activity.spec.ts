@@ -131,7 +131,7 @@ test('browser downloads complete natively without creating server jobs', async (
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-  expect(Buffer.concat(chunks).toString()).toBe('Synthetic HTTP Wrapper browser fixture.\n');
+  expect(Buffer.concat(chunks).toString()).toBe('Synthetic Folderhug browser fixture.\n');
   await expect(page.getByText('Download requested. Check your browser downloads.', { exact: true })).toBeVisible();
   const after = await page.request.get('/api/v1/downloads');
   expect((await after.json() as { downloads: unknown[] }).downloads.length).toBe(beforeJobs);

@@ -397,8 +397,8 @@ func TestPermissionsRevocationAndCSV(t *testing.T) {
 }
 
 func TestScan100000(t *testing.T) {
-	if os.Getenv("HTTP_WRAPPER_SCAN_BENCHMARK") != "1" {
-		t.Skip("set HTTP_WRAPPER_SCAN_BENCHMARK=1 for the synthetic 100000-entry measurement")
+	if os.Getenv("FOLDERHUG_SCAN_BENCHMARK") != "1" && os.Getenv("HTTP_WRAPPER_SCAN_BENCHMARK") != "1" {
+		t.Skip("set FOLDERHUG_SCAN_BENCHMARK=1 for the synthetic 100000-entry measurement")
 	}
 	dirs := map[string][]string{"": {}}
 	for folder := range 4 {

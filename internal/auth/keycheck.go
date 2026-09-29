@@ -7,6 +7,7 @@ import (
 	"errors"
 )
 
+// This plaintext verifies existing encrypted key checks; changing it would reject their keys.
 const keyCheckText = "HTTP Wrapper credential key v1"
 
 // InitializeKeyCheck records key ownership even before a profile has credentials.

@@ -1,4 +1,4 @@
-package main
+package appcli
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/themartz90/folderhug/internal/auth"
 	"github.com/themartz90/folderhug/internal/config"
+	"github.com/themartz90/folderhug/internal/httpapi"
 	"github.com/themartz90/folderhug/internal/store"
 )
 
@@ -29,7 +30,7 @@ func configureDev(cfg *config.Config) error {
 	host = cfg.PublicURL.Hostname()
 	ip = net.ParseIP(host)
 	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return fmt.Errorf("dev requires localhost or a loopback IP in HTTPWRAPPER_PUBLIC_URL")
+		return fmt.Errorf("dev requires localhost or a loopback IP in FOLDERHUG_PUBLIC_URL")
 	}
 	cfg.DataDir = filepath.Join(".local", "dev", "data")
 	cfg.KeysDir = filepath.Join(".local", "dev", "keys")
@@ -115,11 +116,11 @@ func devHandler(next http.Handler, session, origin string) http.Handler {
 		cookies := r.Cookies()
 		r.Header.Del("Cookie")
 		for _, cookie := range cookies {
-			if cookie.Name != "http_wrapper_session" {
+			if cookie.Name != httpapi.SessionCookieName && cookie.Name != "http_wrapper_session" {
 				r.AddCookie(cookie)
 			}
 		}
-		r.AddCookie(&http.Cookie{Name: "http_wrapper_session", Value: session})
+		r.AddCookie(&http.Cookie{Name: httpapi.SessionCookieName, Value: session})
 		next.ServeHTTP(w, r)
 	})
 }

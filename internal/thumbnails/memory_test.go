@@ -28,8 +28,8 @@ func (memoryFixtureImage) At(x, y int) color.Color {
 }
 
 func TestThumbnailConcurrentMaximumImageMemory(t *testing.T) {
-	if os.Getenv("HTTPWRAPPER_THUMBNAIL_BENCHMARK") != "1" {
-		t.Skip("set HTTPWRAPPER_THUMBNAIL_BENCHMARK=1 for the two-worker memory acceptance test")
+	if os.Getenv("FOLDERHUG_THUMBNAIL_BENCHMARK") != "1" && os.Getenv("HTTPWRAPPER_THUMBNAIL_BENCHMARK") != "1" {
+		t.Skip("set FOLDERHUG_THUMBNAIL_BENCHMARK=1 for the two-worker memory acceptance test")
 	}
 	var encoded bytes.Buffer
 	encoder := png.Encoder{CompressionLevel: png.BestSpeed}

@@ -15,8 +15,8 @@ import (
 )
 
 func TestResourceCached10000ListingP95(t *testing.T) {
-	if os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1" || runtime.GOOS != "linux" {
-		t.Skip("set HTTPWRAPPER_RESOURCE_ACCEPTANCE=1 on Linux for synthetic latency measurements")
+	if (os.Getenv("FOLDERHUG_RESOURCE_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1") || runtime.GOOS != "linux" {
+		t.Skip("set FOLDERHUG_RESOURCE_ACCEPTANCE=1 on Linux for synthetic latency measurements")
 	}
 	s, fetcher, profile, owner := fixture(t)
 	var html strings.Builder

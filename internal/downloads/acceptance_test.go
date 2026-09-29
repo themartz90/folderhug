@@ -32,8 +32,8 @@ import (
 
 func acceptanceEnabled(t *testing.T) {
 	t.Helper()
-	if os.Getenv("HTTPWRAPPER_DOWNLOAD_ACCEPTANCE") != "1" {
-		t.Skip("set HTTPWRAPPER_DOWNLOAD_ACCEPTANCE=1 for bounded synthetic acceptance checks")
+	if os.Getenv("FOLDERHUG_DOWNLOAD_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_DOWNLOAD_ACCEPTANCE") != "1" {
+		t.Skip("set FOLDERHUG_DOWNLOAD_ACCEPTANCE=1 for bounded synthetic acceptance checks")
 	}
 }
 
@@ -197,7 +197,7 @@ func acceptancePersistentHarness(t *testing.T, directory string, create bool) (*
 
 func TestAcceptanceDownloadChild(t *testing.T) {
 	acceptanceEnabled(t)
-	directory := os.Getenv("HTTPWRAPPER_ACCEPTANCE_CHILD_ROOT")
+	directory := os.Getenv("FOLDERHUG_ACCEPTANCE_CHILD_ROOT")
 	if directory == "" {
 		t.Skip("subprocess helper")
 	}
@@ -226,7 +226,7 @@ func TestAcceptanceProcessKillAndResume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestAcceptanceDownloadChild$", "-test.timeout=20s")
-	cmd.Env = append(os.Environ(), "HTTPWRAPPER_ACCEPTANCE_CHILD_ROOT="+directory)
+	cmd.Env = append(os.Environ(), "FOLDERHUG_ACCEPTANCE_CHILD_ROOT="+directory)
 	logFile, err := os.Create(filepath.Join(directory, "child.log"))
 	if err != nil {
 		t.Fatal(err)

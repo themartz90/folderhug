@@ -197,7 +197,7 @@ func run() error {
 
 func runtimeDirectory() (string, error) {
 	if len(os.Args) == 1 {
-		return os.MkdirTemp("", "http-wrapper-web-fixture-")
+		return os.MkdirTemp("", "folderhug-web-fixture-")
 	}
 	if len(os.Args) != 3 || os.Args[1] != "--runtime-dir" || !filepath.IsAbs(os.Args[2]) {
 		return "", fmt.Errorf("usage: web-fixture [--runtime-dir ABSOLUTE_NEW_DIRECTORY]")

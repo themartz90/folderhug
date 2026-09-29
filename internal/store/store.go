@@ -23,6 +23,7 @@ func Open(directory string) (*Store, error) {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
+	// Keep the original filename so an existing installation opens its database.
 	abs, err := filepath.Abs(filepath.Join(directory, "http-wrapper.db"))
 	if err != nil {
 		return nil, err

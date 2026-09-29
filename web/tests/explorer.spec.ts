@@ -36,7 +36,7 @@ test('selection survives views and filters and clears on a different folder', as
       await size.selectOption('large');
       await expect.poll(async () => (await tile.boundingBox())!.width).toBeGreaterThan(smallWidth);
       await expect(page.getByRole('checkbox', { name: 'Select mountain.png', exact: true })).toBeChecked();
-      expect(await page.evaluate(() => localStorage.getItem('httpwrapper.grid-size'))).toBe('large');
+      expect(await page.evaluate(() => localStorage.getItem('folderhug.grid-size'))).toBe('large');
       await page.screenshot({ path: testInfo.outputPath('grid-thumbnails.png'), fullPage: true });
     }
   }

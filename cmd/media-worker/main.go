@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/themartz90/folderhug/internal/config"
 	"github.com/themartz90/folderhug/internal/mediaworker"
 )
 
@@ -23,7 +24,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Usage: media-worker [network-check]")
 		os.Exit(2)
 	} else {
-		err = mediaworker.Run(ctx, mediaworker.Config{SocketPath: os.Getenv("HTTPWRAPPER_MEDIA_SOCKET"), KeyPath: os.Getenv("HTTPWRAPPER_WORKER_KEY"), FFmpegPath: os.Getenv("FFMPEG_PATH")})
+		err = mediaworker.Run(ctx, mediaworker.Config{SocketPath: config.Env("MEDIA_SOCKET"), KeyPath: config.Env("WORKER_KEY"), FFmpegPath: os.Getenv("FFMPEG_PATH")})
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

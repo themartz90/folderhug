@@ -43,8 +43,8 @@ printf '%s\n' 'synthetic-ci-password-2026' | docker run --rm -i \
   --network none \
   --mount "type=volume,source=$data_volume,target=/data" \
   --mount "type=volume,source=$keys_volume,target=/keys" \
-  -e HTTPWRAPPER_DATA_DIR=/data \
-  -e HTTPWRAPPER_KEYS_DIR=/keys \
+  -e FOLDERHUG_DATA_DIR=/data \
+  -e FOLDERHUG_KEYS_DIR=/keys \
   "$image" setup --password-stdin >/dev/null
 
 start_app() {
@@ -57,13 +57,13 @@ start_app() {
     --mount "type=volume,source=$keys_volume,target=/keys,readonly"
     --mount "type=volume,source=$downloads_volume,target=/downloads"
     --mount "type=volume,source=$cache_volume,target=/cache"
-    -e HTTPWRAPPER_ADDR=0.0.0.0:8080
-    -e HTTPWRAPPER_PUBLIC_URL=http://localhost:8080
-    -e HTTPWRAPPER_DATA_DIR=/data
-    -e HTTPWRAPPER_KEYS_DIR=/keys
-    -e HTTPWRAPPER_DOWNLOADS_DIR=/downloads
-    -e HTTPWRAPPER_CACHE_DIR=/cache
-    -e 'HTTPWRAPPER_MOUNTED_ROOTS=[{"id":"synthetic","label":"Synthetic","path":"/mnt/synthetic"}]'
+    -e FOLDERHUG_ADDR=0.0.0.0:8080
+    -e FOLDERHUG_PUBLIC_URL=http://localhost:8080
+    -e FOLDERHUG_DATA_DIR=/data
+    -e FOLDERHUG_KEYS_DIR=/keys
+    -e FOLDERHUG_DOWNLOADS_DIR=/downloads
+    -e FOLDERHUG_CACHE_DIR=/cache
+    -e 'FOLDERHUG_MOUNTED_ROOTS=[{"id":"synthetic","label":"Synthetic","path":"/mnt/synthetic"}]'
   )
   if [[ $use_mount == yes ]]; then
     args+=(--mount "type=bind,source=$mount_dir,target=/mnt/synthetic")
@@ -73,7 +73,7 @@ start_app() {
 
   local ready=0
   for _ in {1..30}; do
-    if docker exec "$container" http-wrapper healthcheck >/dev/null 2>&1; then
+    if docker exec "$container" folderhug healthcheck >/dev/null 2>&1; then
       ready=1
       break
     fi
@@ -108,9 +108,11 @@ login() {
     -H 'Content-Type: application/json' \
     --data '{"password":"synthetic-ci-password-2026"}' \
     'http://localhost:8080/api/v1/auth/login' >/dev/null
+  awk '$6 == "folderhug_session" { found = 1 } END { exit !found }' "$state_dir/cookies"
 }
 
 start_app yes
+docker exec "$container" http-wrapper healthcheck
 login
 api -b "$state_dir/cookies" | jq -e '.destinations[] | select(.id == "synthetic" and .available == true)' >/dev/null
 docker exec "$container" sh -c 'printf mounted > /mnt/synthetic/ci-marker && test -w /mnt/synthetic'

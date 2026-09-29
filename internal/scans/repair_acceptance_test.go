@@ -13,8 +13,8 @@ import (
 )
 
 func TestRepairScan100000ConcurrentPruning(t *testing.T) {
-	if runtime.GOOS != "linux" || os.Getenv("HTTPWRAPPER_SCAN_REPAIR_ACCEPTANCE") != "1" {
-		t.Skip("set HTTPWRAPPER_SCAN_REPAIR_ACCEPTANCE=1 on Linux for concurrent 100000-entry scans")
+	if runtime.GOOS != "linux" || (os.Getenv("FOLDERHUG_SCAN_REPAIR_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_SCAN_REPAIR_ACCEPTANCE") != "1") {
+		t.Skip("set FOLDERHUG_SCAN_REPAIR_ACCEPTANCE=1 on Linux for concurrent 100000-entry scans")
 	}
 	dirs := map[string][]string{"": {"part0/", "part1/"}}
 	for part := range 2 {

@@ -19,7 +19,7 @@ type ZoomWorker = typeof globalThis & {
 async function removeTestProfile(temporaryRoot: string, userDataDir: string) {
   const resolved = await realpath(userDataDir);
   const relative = path.relative(temporaryRoot, resolved);
-  if (path.isAbsolute(relative) || relative.startsWith('..') || path.dirname(relative) !== '.' || !path.basename(relative).startsWith('http-wrapper-zoom-')) {
+  if (path.isAbsolute(relative) || relative.startsWith('..') || path.dirname(relative) !== '.' || !path.basename(relative).startsWith('folderhug-zoom-')) {
     throw new Error('Refusing to remove a browser profile outside the test temporary directory.');
   }
   await rm(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
@@ -28,7 +28,7 @@ async function removeTestProfile(temporaryRoot: string, userDataDir: string) {
 test('native 200% browser zoom keeps browsing and preview controls usable', async ({ browserName }, testInfo) => {
   test.skip(browserName !== 'chromium', 'The tabs zoom API is specific to Chromium extensions.');
   const temporaryRoot = await realpath(tmpdir());
-  const userDataDir = await mkdtemp(path.join(temporaryRoot, 'http-wrapper-zoom-'));
+  const userDataDir = await mkdtemp(path.join(temporaryRoot, 'folderhug-zoom-'));
   let context: BrowserContext | undefined;
   try {
     const extension = fileURLToPath(new URL('./zoom-extension', import.meta.url));

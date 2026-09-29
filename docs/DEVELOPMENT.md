@@ -4,11 +4,11 @@ Use Go 1.27.1, Node 24, and npm 11.5.1 or newer within major version 11. The rep
 
 ## Local testing without a password
 
-After building the frontend, run `go run ./cmd/http-wrapper dev` from the repository root and open `http://localhost:8080`. This command creates its own state in `.local/dev` and signs you in automatically. No setup command or password entry is needed. It accepts only loopback connections and a localhost or loopback public URL. Keep it local; do not expose it through a proxy or tunnel.
+After building the frontend, run `go run ./cmd/folderhug dev` from the repository root and open `http://localhost:8080`. This command creates its own state in `.local/dev` and signs you in automatically. No setup command or password entry is needed. It accepts only loopback connections and a localhost or loopback public URL. Keep it local; do not expose it through a proxy or tunnel.
 
 Development mode keeps profiles and downloads between restarts. It generates an owner secret and credential key inside `.local/dev/keys`; keep those with the development database. Existing normal app data is separate. The optional video worker is disabled in this mode. Restart the command after signing out or when the 24-hour session expires.
 
-For frontend hot reload, use the two-terminal workflow below, replacing `go run ./cmd/http-wrapper` with `go run ./cmd/http-wrapper dev` in the backend terminal.
+For frontend hot reload, use the two-terminal workflow below, replacing `go run ./cmd/folderhug` with `go run ./cmd/folderhug dev` in the backend terminal.
 
 ## Build and initialize
 
@@ -17,18 +17,18 @@ cd web
 npm ci
 npm run build
 cd ..
-go run ./cmd/http-wrapper setup
-go run ./cmd/http-wrapper
+go run ./cmd/folderhug setup
+go run ./cmd/folderhug
 ```
 
-Open `http://localhost:8080`. The hostname matters: the app rejects a Host header that differs from `HTTPWRAPPER_PUBLIC_URL`. With the defaults, opening `http://127.0.0.1:8080` instead is not equivalent.
+Open `http://localhost:8080`. The hostname matters: the app rejects a Host header that differs from `FOLDERHUG_PUBLIC_URL`. With the defaults, opening `http://127.0.0.1:8080` instead is not equivalent.
 
 The setup command creates the owner account and `.local/keys/credentials.key`. It refuses to overwrite an existing owner. Do not run two app instances against the same state directory. Stop the app with Ctrl+C before password recovery or copying its state.
 
 Build a native executable after the frontend:
 
 ```powershell
-go build -o bin/http-wrapper.exe ./cmd/http-wrapper
+go build -o bin/folderhug.exe ./cmd/folderhug
 ```
 
 ## Frontend development server
@@ -36,8 +36,8 @@ go build -o bin/http-wrapper.exe ./cmd/http-wrapper
 Stop the app before changing its public origin. In the backend terminal:
 
 ```powershell
-$env:HTTPWRAPPER_PUBLIC_URL = 'http://127.0.0.1:5173'
-go run ./cmd/http-wrapper
+$env:FOLDERHUG_PUBLIC_URL = 'http://127.0.0.1:5173'
+go run ./cmd/folderhug
 ```
 
 In a second terminal:
@@ -52,7 +52,7 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` and `/health` to `127.0.0.1:80
 To return to the built app, stop both processes and clear this terminal override before restarting Go:
 
 ```powershell
-Remove-Item Env:HTTPWRAPPER_PUBLIC_URL
+Remove-Item Env:FOLDERHUG_PUBLIC_URL
 ```
 
 ## Checks
@@ -100,7 +100,7 @@ Read the reported reachability as well as the advisory count. A module can conta
 Resource checks are opt-in on Linux and use synthetic data:
 
 ```sh
-HTTPWRAPPER_RESOURCE_ACCEPTANCE=1 GOMEMLIMIT=384MiB \
+FOLDERHUG_RESOURCE_ACCEPTANCE=1 GOMEMLIMIT=384MiB \
 go test -p 1 -count=1 -timeout=3m -run '^TestResource' -v \
 ./internal/scans ./internal/content ./internal/catalog
 ```

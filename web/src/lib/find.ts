@@ -1,3 +1,5 @@
+import { readStoredValue } from './storage';
+
 export const fileTypes = ['video', 'image', 'audio', 'document', 'archive', 'other'] as const;
 export type FileType = (typeof fileTypes)[number];
 
@@ -12,7 +14,7 @@ export type FindRun = {
 
 export function readFind(): FindRun | null {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem('http-wrapper.find') ?? 'null');
+    const value: unknown = JSON.parse(readStoredValue(sessionStorage, 'find') ?? 'null');
     if (!value || typeof value !== 'object') return null;
     const run = value as Partial<FindRun>;
     if (

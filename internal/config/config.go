@@ -37,58 +37,58 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	u, err := url.Parse(value("HTTPWRAPPER_PUBLIC_URL", "http://localhost:8080"))
+	u, err := url.Parse(Value("PUBLIC_URL", "http://localhost:8080"))
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "http" && u.Scheme != "https") {
-		return Config{}, fmt.Errorf("HTTPWRAPPER_PUBLIC_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
+		return Config{}, fmt.Errorf("FOLDERHUG_PUBLIC_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
 	}
 	u.Path = ""
-	policy, err := loadAllowances(os.Getenv("HTTPWRAPPER_UPSTREAM_ALLOW_FILE"))
+	policy, err := loadAllowances(Env("UPSTREAM_ALLOW_FILE"))
 	if err != nil {
 		return Config{}, err
 	}
-	streamBytes, err := strconv.ParseInt(value("HTTPWRAPPER_STREAM_MAX_BYTES", "1099511627776"), 10, 64)
+	streamBytes, err := strconv.ParseInt(Value("STREAM_MAX_BYTES", "1099511627776"), 10, 64)
 	if err != nil || streamBytes < 1 {
-		return Config{}, fmt.Errorf("HTTPWRAPPER_STREAM_MAX_BYTES must be a positive byte count")
+		return Config{}, fmt.Errorf("FOLDERHUG_STREAM_MAX_BYTES must be a positive byte count")
 	}
-	streamTimeout, err := time.ParseDuration(value("HTTPWRAPPER_STREAM_TIMEOUT", "24h"))
+	streamTimeout, err := time.ParseDuration(Value("STREAM_TIMEOUT", "24h"))
 	if err != nil || streamTimeout < time.Second || streamTimeout > 7*24*time.Hour {
-		return Config{}, fmt.Errorf("HTTPWRAPPER_STREAM_TIMEOUT must be between 1s and 168h")
+		return Config{}, fmt.Errorf("FOLDERHUG_STREAM_TIMEOUT must be between 1s and 168h")
 	}
 	limits := map[string]int64{}
 	var mounted []downloads.MountedRoot
-	if raw := os.Getenv("HTTPWRAPPER_MOUNTED_ROOTS"); raw != "" {
+	if raw := Env("MOUNTED_ROOTS"); raw != "" {
 		if len(raw) > 65536 || json.Unmarshal([]byte(raw), &mounted) != nil || len(mounted) > 32 {
-			return Config{}, fmt.Errorf("HTTPWRAPPER_MOUNTED_ROOTS must be a JSON array of up to 32 roots")
+			return Config{}, fmt.Errorf("FOLDERHUG_MOUNTED_ROOTS must be a JSON array of up to 32 roots")
 		}
 		seen := map[string]bool{"server": true}
 		for _, root := range mounted {
 			if root.ID == "" || len(root.ID) > 64 || seen[root.ID] || root.Label == "" || len(root.Label) > 120 || !filepath.IsAbs(root.Path) || filepath.Clean(root.Path) != root.Path {
-				return Config{}, fmt.Errorf("HTTPWRAPPER_MOUNTED_ROOTS contains an invalid root")
+				return Config{}, fmt.Errorf("FOLDERHUG_MOUNTED_ROOTS contains an invalid root")
 			}
 			for _, ch := range root.ID {
 				if !(ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_') {
-					return Config{}, fmt.Errorf("HTTPWRAPPER_MOUNTED_ROOTS contains an invalid root ID")
+					return Config{}, fmt.Errorf("FOLDERHUG_MOUNTED_ROOTS contains an invalid root ID")
 				}
 			}
 			seen[root.ID] = true
 		}
 	}
 	for key, fallback := range map[string]string{"DOWNLOAD_BUDGET_BYTES": "107374182400", "DOWNLOAD_RESERVE_BYTES": "5368709120", "DOWNLOAD_UNKNOWN_BYTES": "21474836480", "THUMBNAIL_CACHE_BYTES": "1073741824"} {
-		n, e := strconv.ParseInt(value("HTTPWRAPPER_"+key, fallback), 10, 64)
+		n, e := strconv.ParseInt(Value(key, fallback), 10, 64)
 		if e != nil || n < 0 || (n == 0 && key != "DOWNLOAD_RESERVE_BYTES") {
-			return Config{}, fmt.Errorf("HTTPWRAPPER_%s must be a valid byte count", key)
+			return Config{}, fmt.Errorf("FOLDERHUG_%s must be a valid byte count", key)
 		}
 		limits[key] = n
 	}
 	return Config{
 		DownloadBudgetBytes: limits["DOWNLOAD_BUDGET_BYTES"], DownloadReserveBytes: limits["DOWNLOAD_RESERVE_BYTES"], DownloadUnknownBytes: limits["DOWNLOAD_UNKNOWN_BYTES"], ThumbnailCacheBytes: limits["THUMBNAIL_CACHE_BYTES"],
-		MediaSocket: os.Getenv("HTTPWRAPPER_MEDIA_SOCKET"), WorkerKeyFile: value("HTTPWRAPPER_WORKER_KEY", filepath.Join(".local", "worker-key", "worker.key")),
-		Address: value("HTTPWRAPPER_ADDR", "127.0.0.1:8080"), PublicURL: u,
-		DataDir:        value("HTTPWRAPPER_DATA_DIR", filepath.Join(".local", "data")),
-		KeysDir:        value("HTTPWRAPPER_KEYS_DIR", filepath.Join(".local", "keys")),
-		DownloadsDir:   value("HTTPWRAPPER_DOWNLOADS_DIR", filepath.Join(".local", "downloads")),
+		MediaSocket: Env("MEDIA_SOCKET"), WorkerKeyFile: Value("WORKER_KEY", filepath.Join(".local", "worker-key", "worker.key")),
+		Address: Value("ADDR", "127.0.0.1:8080"), PublicURL: u,
+		DataDir:        Value("DATA_DIR", filepath.Join(".local", "data")),
+		KeysDir:        Value("KEYS_DIR", filepath.Join(".local", "keys")),
+		DownloadsDir:   Value("DOWNLOADS_DIR", filepath.Join(".local", "downloads")),
 		MountedRoots:   mounted,
-		CacheDir:       value("HTTPWRAPPER_CACHE_DIR", filepath.Join(".local", "cache")),
+		CacheDir:       Value("CACHE_DIR", filepath.Join(".local", "cache")),
 		UpstreamPolicy: policy,
 		StreamMaxBytes: streamBytes, StreamTimeout: streamTimeout,
 	}, nil
@@ -135,8 +135,16 @@ func loadAllowances(path string) (upstream.Policy, error) {
 	return policy, nil
 }
 
-func value(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+// Env prefers the Folderhug setting and accepts the original name for existing installations.
+func Env(suffix string) string {
+	if v, present := os.LookupEnv("FOLDERHUG_" + suffix); present {
+		return v
+	}
+	return os.Getenv("HTTPWRAPPER_" + suffix)
+}
+
+func Value(suffix, fallback string) string {
+	if v := Env(suffix); v != "" {
 		return v
 	}
 	return fallback

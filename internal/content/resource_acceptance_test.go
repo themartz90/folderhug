@@ -22,8 +22,8 @@ func (b *resourceBody) Read(p []byte) (int, error) {
 }
 
 func TestResourceGiBStreamRSS(t *testing.T) {
-	if os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1" || runtime.GOOS != "linux" {
-		t.Skip("set HTTPWRAPPER_RESOURCE_ACCEPTANCE=1 on Linux for procfs resource measurements")
+	if (os.Getenv("FOLDERHUG_RESOURCE_ACCEPTANCE") != "1" && os.Getenv("HTTPWRAPPER_RESOURCE_ACCEPTANCE") != "1") || runtime.GOOS != "linux" {
+		t.Skip("set FOLDERHUG_RESOURCE_ACCEPTANCE=1 on Linux for procfs resource measurements")
 	}
 	const length int64 = 1 << 30
 	body := &resourceBody{generatedBody{remaining: length}}
