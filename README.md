@@ -1,7 +1,6 @@
 # Folderhug
 
-![Folderhug, a red panda holding a folder](docs/assets/banner-light.jpg#gh-light-mode-only)
-![Folderhug, a red panda holding a folder](docs/assets/banner-dark.jpg#gh-dark-mode-only)
+![Folderhug, a red panda holding a folder](docs/assets/banner-light.jpg)
 
 Folderhug is a self-hosted file explorer for HTTP directory listings, such as a seedbox's download folder. Add your sources, browse and search their folders, preview supported media, and download files to your browser or server. Folderhug leaves the source files unchanged.
 
