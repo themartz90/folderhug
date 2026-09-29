@@ -36,3 +36,16 @@ Open this page in the GitHub mobile app. Note which numbered images appear. For 
     <img src="https://github.com/themartz90/jellydash/raw/main/docs/assets/banner-light.png" alt="5: Jellydash theme banner, full URLs" width="440">
   </picture>
 </p>
+
+## 6. Folderhug: dark banner without theme selection
+
+![6: Folderhug dark banner](assets/banner-dark.jpg)
+
+## 7. Folderhug: light banner in both picture slots
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-light.jpg">
+    <img src="assets/banner-light.jpg" alt="7: Folderhug light banner, both picture slots" width="440">
+  </picture>
+</p>
