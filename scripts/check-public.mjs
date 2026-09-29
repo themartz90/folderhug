@@ -28,7 +28,9 @@ for (const file of files) {
   const content = staged ? execFileSync('git', ['show', `:${file}`], { maxBuffer: 20 * 1024 * 1024 }) : readFileSync(file);
   if (content.includes(0)) continue;
   const text = content.toString('utf8');
-  const privateScanText = text.replaceAll('themartz90/folderhug', 'public-repository');
+  const privateScanText = text
+    .replaceAll('themartz90/folderhug', 'public-repository')
+    .replaceAll('themartz90/jellydash', 'public-reference-repository');
   if (privateValues.some((value) => privateScanText.includes(value))) failures.push(`${file}: matches private local configuration`);
   if (/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}/.test(text)) {
     failures.push(`${file}: possible embedded credential`);
