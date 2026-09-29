@@ -679,7 +679,7 @@ func TestTokenOwnershipAndOwnerTakeover(t *testing.T) {
 
 func TestUnknownAndEmptyFilesComplete(t *testing.T) {
 	for _, size := range []int{0, 101} {
-		h := fixture(t, size, Limits{})
+		h := fixture(t, size, Limits{UnknownSizeMaxBytes: 1 << 10})
 		h.fetcher.unknown = true
 		h.fetcher.withoutETag = true
 		j := h.create(t, 1, "length", h.owner)

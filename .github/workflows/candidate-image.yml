@@ -25,6 +25,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
           gh run list --repo "$GITHUB_REPOSITORY" --workflow check.yml --commit "$GITHUB_SHA" --event push \

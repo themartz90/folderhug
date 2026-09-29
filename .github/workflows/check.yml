@@ -14,6 +14,7 @@ permissions:
 jobs:
   checks:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -30,6 +31,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: node scripts/check-public.mjs
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= -pyflakes=
       - run: npm ci
         working-directory: web
       - run: npm run check

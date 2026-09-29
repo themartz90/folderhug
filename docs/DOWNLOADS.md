@@ -35,7 +35,17 @@ services:
           create_host_path: false
 ```
 
-Create `/srv/media` before starting Compose and make it writable by the container's UID/GID 10001. Check the permissions of the intended directory; do not broadly change ownership or permissions on existing media trees. `create_host_path: false` makes a missing host path an error instead of creating a new folder. Keep the existing app volumes when adding the override. The path in the JSON is inside the container. For the source build, start with `docker compose -f compose.yaml -f examples/compose.mounts.yaml up -d app`; for an image installation, replace `compose.yaml` with `compose.images.yaml`, set `FOLDERHUG_IMAGE`, and retain the installation's `-p` project name. Check the combined configuration with `docker compose -f compose.yaml -f examples/compose.mounts.yaml config` before starting.
+Create `/srv/media` before starting Compose and make it writable by the container's UID/GID 10001. For a new, empty folder:
+
+```sh
+sudo mkdir /srv/media &&
+sudo chown 10001:10001 /srv/media &&
+sudo chmod 0750 /srv/media
+```
+
+These commands stop if the folder already exists. For an existing library, check its permissions and grant the container access to the intended folder without changing ownership or permissions across the whole tree. Change `source` in the override to your host folder; keep `target` and the JSON `path` equal. The JSON `label` is the name shown in the app.
+
+`create_host_path: false` makes a missing host path an error instead of creating a new folder. Keep the existing app volumes when adding the override. For the source build, start with `docker compose -f compose.yaml -f examples/compose.mounts.yaml up -d app`; for an image installation, replace `compose.yaml` with `compose.images.yaml`, set `FOLDERHUG_IMAGE`, and retain the installation's `-p` project name. Check the combined configuration with `docker compose -f compose.yaml -f examples/compose.mounts.yaml config` before starting. Keep the mount override in later startup and update commands too.
 
 On Windows native development, set the same variable with an absolute Windows path to an existing local folder. The picker shows folders inside configured mounts, remembers the last selected folder, and stores favorites with the owner's preferences. If a mount is missing, it stays unavailable instead of switching a job to another destination. The owner can still browse and download completed files after the mount returns. The app does not delete completed files from mounted folders through Server queue, since another program may have changed or replaced them. Remove those files using the host's normal file tools.
 

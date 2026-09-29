@@ -1,0 +1,113 @@
+name: Promote release image
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: release-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+jobs:
+  promote-tested-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require completed distribution materials
+        env:
+          RELEASES_ENABLED: ${{ vars.FOLDERHUG_IMAGE_RELEASES_ENABLED }}
+        run: |
+          if [[ "$RELEASES_ENABLED" != true ]]; then
+            echo '::error::Set FOLDERHUG_IMAGE_RELEASES_ENABLED=true only after app image notices and corresponding-source materials are complete.'
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate the published tag and candidate run
+        id: source
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$TAG"
+          if [[ ! $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]; then
+            echo 'Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N.' >&2
+            exit 1
+          fi
+          if [[ $TAG == *-rc.* ]]; then
+            test "$PRERELEASE" = true
+          else
+            test "$PRERELEASE" = false
+          fi
+          git show-ref --tags --verify --quiet "refs/tags/$TAG"
+          sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          test "$sha" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow candidate-image.yml \
+            --commit "$sha" --event workflow_dispatch --limit 100 \
+            --json status,conclusion,headSha | jq -e --arg sha "$sha" \
+            'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Pull and check the tested core image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          docker pull --platform linux/amd64 "$image:sha-$SOURCE_SHA"
+          actual_sha=$(docker image inspect "$image:sha-$SOURCE_SHA" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          test "$actual_sha" = "$SOURCE_SHA"
+          test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+          echo "Promoting tested source $SOURCE_SHA"
+      - name: Push the version image
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker tag "$image:sha-$SOURCE_SHA" "$image:$TAG"
+          docker push "$image:$TAG"
+          digest=$(docker image inspect "$image:$TAG" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$image@sha256:" | head -n 1)
+          test -n "$digest"
+          printf 'Source: `%s`\nVersion image: `%s`\nDigest: `%s`\nPlatform: `linux/amd64`\n' \
+            "$SOURCE_SHA" "$image:$TAG" "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Move latest only for the current stable release
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          latest_tag=''
+          for attempt in {1..10}; do
+            if ! latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null); then
+              echo 'Could not verify the latest GitHub release; leaving the image latest tag unchanged.'
+              exit 0
+            fi
+            if [[ $latest_tag == "$TAG" ]]; then
+              break
+            fi
+            sleep 3
+          done
+          if [[ $latest_tag != "$TAG" ]]; then
+            echo "Latest GitHub release is $latest_tag; leaving the image latest tag unchanged."
+            exit 0
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker tag "$image:sha-$SOURCE_SHA" "$image:latest"
+          docker push "$image:latest"
+          echo "Updated $image:latest for $TAG" >> "$GITHUB_STEP_SUMMARY"

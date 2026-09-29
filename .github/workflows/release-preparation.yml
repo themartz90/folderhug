@@ -1,0 +1,152 @@
+name: Prepare draft release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: Existing version tag, for example v1.2.3 or v1.2.3-rc.1
+        type: string
+        required: true
+
+concurrency:
+  group: release-preparation-${{ inputs.version_tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.tag.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the explicit tag and main ancestry
+        id: tag
+        env:
+          TAG: ${{ inputs.version_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          if [[ ! $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]; then
+            echo 'Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N.' >&2
+            exit 1
+          fi
+          git show-ref --tags --verify --quiet "refs/tags/$TAG"
+          sha=$(git rev-parse --verify "refs/tags/$TAG^{commit}")
+          git merge-base --is-ancestor "$sha" "$GITHUB_SHA"
+          echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+
+  verify-and-package:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate-tag.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: node scripts/check-public.mjs
+      - run: npm ci
+        working-directory: web
+      - run: npm run check
+        working-directory: web
+      - run: npm run lint
+        working-directory: web
+      - run: npm run test:unit
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm audit
+        working-directory: web
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: web
+      - run: npm run test:e2e
+        working-directory: web
+      - name: Build and smoke the core app
+        env:
+          SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
+        run: |
+          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$SOURCE_SHA" -t folderhug:release-check .
+          FOLDERHUG_IMAGE=folderhug:release-check docker compose -f compose.images.yaml config --quiet
+          bash scripts/ci-container-smoke.sh folderhug:release-check
+      - name: Build and test the optional media target
+        run: |
+          docker build --platform linux/amd64 --target media -t folderhug:media-release-check .
+          docker build --platform linux/amd64 --target media-test -t folderhug:media-test-release-check .
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777 \
+            -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures \
+            --entrypoint sh folderhug:media-test-release-check \
+            -c 'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures && /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'
+      - name: Package Compose, checksums, and app notices
+        env:
+          TAG: ${{ inputs.version_tag }}
+          SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
+        run: bash scripts/package-release.sh "$TAG" "$SOURCE_SHA" folderhug:release-check dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: draft-assets
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  create-draft:
+    needs: [validate-tag, verify-and-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: draft-assets
+          path: dist
+      - name: Recheck the tag and create a draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.version_tag }}
+          SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          test "$(git rev-parse --verify "refs/tags/$TAG^{commit}")" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'A release already exists for this tag; refusing to replace it.' >&2
+            exit 1
+          fi
+          (
+            cd dist
+            sha256sum -c "folderhug-checksums-$TAG.txt"
+          )
+          printf 'Source commit: %s\n\nThis draft contains a Compose file, checksums, and app notices. Set FOLDERHUG_IMAGE to an app image built from this commit. Verify image availability, package visibility, and distribution materials before publication.\n' \
+            "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
+          release_args=(--draft --verify-tag --title "Folderhug $TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
+          if [[ $TAG == *-rc.* ]]; then
+            release_args+=(--prerelease)
+          fi
+          gh release create "$TAG" \
+            "dist/folderhug-compose-$TAG.yaml" \
+            "dist/folderhug-checksums-$TAG.txt" \
+            "dist/folderhug-notices-$TAG.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" "${release_args[@]}"
