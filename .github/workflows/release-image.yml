@@ -100,6 +100,10 @@ jobs:
               echo "Public release requires public pull access for $package. Change package visibility yourself before publication." >&2
               exit 1
             fi
+            if [[ $repo_visibility == private && $package_visibility != private ]]; then
+              echo "Refusing public image publication while the repository is private: $package." >&2
+              exit 1
+            fi
           done
           for ref in "$APP_REF" "$MEDIA_REF"; do
             docker pull --platform linux/amd64 "$ref"
@@ -135,14 +139,18 @@ jobs:
           latest_tag=''
           for attempt in {1..10}; do
             if ! latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null); then
-              echo 'Could not verify the latest GitHub release; leaving image latest tags unchanged.'
-              exit 0
+              sleep 3
+              continue
             fi
             if [[ $latest_tag == "$TAG" ]]; then
               break
             fi
             sleep 3
           done
+          if [[ -z $latest_tag ]]; then
+            echo '::error::Could not verify the latest GitHub release. Retry promotion when the API is available.'
+            exit 1
+          fi
           if [[ $latest_tag != "$TAG" ]]; then
             echo "Latest GitHub release is $latest_tag; leaving image latest tags unchanged."
             exit 0
