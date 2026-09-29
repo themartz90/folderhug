@@ -6,6 +6,7 @@
     currentSession,
     errorMessage,
     idPath,
+    refreshSession,
     setSession,
     type Entry,
     type Preferences,
@@ -30,7 +31,11 @@
   import { readStoredValue, removeStoredValue, writeStoredValue } from './lib/storage';
   let authenticated = $state(false);
   let starting = $state(true);
+  let setupRequired = $state(false);
+  let startupError = $state('');
   let password = $state('');
+  let repeatPassword = $state('');
+  let rememberMe = $state(false);
   let signingIn = $state(false);
   let loginError = $state('');
   let sessionMessage = $state('');
@@ -61,6 +66,8 @@
   let collapsed = $state(false);
   let drawer = $state(false);
   let appearance = $state(false);
+  let confirmingLogoutAll = $state(false);
+  let loggingOutAll = $state(false);
   let profileForm = $state<{
     mode: 'create' | 'edit' | 'unlock' | 'remove';
     profile?: Profile;
@@ -84,6 +91,8 @@
   let eventTimer: ReturnType<typeof setTimeout>;
   let noticeTimer: ReturnType<typeof setTimeout>;
   let prefQueue = Promise.resolve();
+  let refreshing: Promise<void> | undefined;
+  let refreshGeneration = -1;
   let activeProfile = $derived(profiles.find((profile) => profile.id === route.profile));
   let orderedProfiles = $derived(
     [...profiles].sort((a, b) => {
@@ -126,10 +135,18 @@
       if (online && authenticated) {
         revision++;
         void api<Schema['Session']>('/auth/session').catch(() => {});
+        renewSession();
       }
     };
     window.addEventListener('online', connection);
     window.addEventListener('offline', connection);
+    const foreground = () => {
+      if (document.visibilityState === 'visible' && authenticated) renewSession();
+    };
+    document.addEventListener('visibilitychange', foreground);
+    const renewal = setInterval(() => {
+      if (authenticated && online && document.visibilityState === 'visible') renewSession();
+    }, 12 * 60 * 60 * 1000);
     const poll = setInterval(() => {
       if (authenticated && document.visibilityState === 'visible') {
         revision++;
@@ -141,12 +158,14 @@
       document.removeEventListener('click', rememberOpener, true);
       eventStream?.close();
       clearInterval(poll);
+      clearInterval(renewal);
       clearTimeout(eventTimer);
       clearTimeout(noticeTimer);
       query.removeEventListener('change', theme);
       window.removeEventListener('popstate', pop);
       window.removeEventListener('online', connection);
       window.removeEventListener('offline', connection);
+      document.removeEventListener('visibilitychange', foreground);
       setSession(null);
     };
   });
@@ -207,29 +226,47 @@
       profile_order: [],
     };
     password = '';
+    repeatPassword = '';
+    rememberMe = false;
     profileForm = null;
     media = null;
     transfer = null;
     drawer = false;
     appearance = false;
+    confirmingLogoutAll = false;
     globalError = '';
     notice = '';
     if (expired) sessionMessage = 'Your session expired. Sign in to continue.';
   }
   async function restore() {
     try {
+      const setup = await api<{ setup_required: boolean }>('/auth/setup');
+      setupRequired = setup.setup_required;
+      if (setupRequired) return;
       const session = await api<Schema['Session']>('/auth/session');
       await begin(session);
-    } catch {
+    } catch (e) {
       authenticated = false;
+      if (!(e instanceof ApiError && e.status === 401)) startupError = errorMessage(e);
     } finally {
       starting = false;
     }
   }
+  function renewSession() {
+    const generation = currentSession();
+    if (refreshing && refreshGeneration === generation) return;
+    refreshGeneration = generation;
+    const work = refreshSession().catch(() => {}).finally(() => {
+      if (refreshing === work) refreshing = undefined;
+    });
+    refreshing = work;
+  }
   async function begin(session: Schema['Session']) {
     setSession(session, () => clearSession(true));
     authenticated = true;
+    setupRequired = false;
     sessionMessage = '';
+    renewSession();
     await bootstrap();
     subscribe();
   }
@@ -238,15 +275,33 @@
     signingIn = true;
     loginError = '';
     try {
-      const session = await api<Schema['Session']>('/auth/login', {
+      if (setupRequired) {
+        if (Array.from(password).length < 6) {
+          loginError = 'Use at least 6 characters for the owner password.';
+          return;
+        }
+        if (password !== repeatPassword) {
+          loginError = 'The passwords do not match.';
+          return;
+        }
+      }
+      const session = await api<Schema['Session']>(setupRequired ? '/auth/setup' : '/auth/login', {
         method: 'POST',
-        body: { password },
+        body: { password, remember_me: rememberMe },
       });
       password = '';
+      repeatPassword = '';
       await begin(session);
     } catch (e) {
       password = '';
-      loginError = errorMessage(e);
+      repeatPassword = '';
+      if (setupRequired && e instanceof ApiError && e.status === 409) {
+        setupRequired = false;
+        sessionMessage = 'Folderhug has already been set up. Sign in to continue.';
+        loginError = '';
+      } else {
+        loginError = errorMessage(e);
+      }
     } finally {
       signingIn = false;
     }
@@ -444,6 +499,19 @@
       tell(errorMessage(e));
     }
   }
+  async function logoutAll() {
+    loggingOutAll = true;
+    try {
+      await api('/auth/logout-all', { method: 'POST' });
+      clearSession();
+      sessionMessage = 'All devices have been signed out.';
+    } catch (e) {
+      tell(errorMessage(e));
+    } finally {
+      loggingOutAll = false;
+      confirmingLogoutAll = false;
+    }
+  }
   async function reorder(id: string, delta: number) {
     const ids = orderedProfiles.map((p) => p.id);
     const index = ids.indexOf(id);
@@ -476,24 +544,37 @@
   {:else if !authenticated}<main class="login-page">
       <form class="login-card" onsubmit={signIn}>
         <Brand login />
-        <p>Sign in to browse your HTTP folders.</p>
+        <p>{setupRequired ? 'Set an owner password to start using Folderhug.' : 'Sign in to browse your HTTP folders.'}</p>
+        {#if startupError}<p class="error-banner" role="alert">{startupError}</p>
+          <button class="button secondary" type="button" onclick={() => {
+            startupError = '';
+            starting = true;
+            void restore();
+          }}>Try again</button>{/if}
         {#if sessionMessage}<p role="status">
             {sessionMessage}
           </p>{/if}{#if loginError}<p class="error-banner" role="alert">
             {loginError}
           </p>{/if}<label class="form-field"
-          >Owner password<input
+        >Owner password<input
             type="password"
-            autocomplete="current-password"
+            autocomplete={setupRequired ? 'new-password' : 'current-password'}
             required
             bind:value={password}
           /></label
-        ><button class="button primary" disabled={signingIn}
-          >{signingIn ? 'Signing in…' : 'Sign in'}</button
+        >{#if setupRequired}<label class="form-field">Repeat password<input
+            type="password"
+            autocomplete="new-password"
+            required
+            bind:value={repeatPassword}
+          /></label>
+          <p class="field-help">Use at least 6 characters. Spaces and Unicode characters are allowed.</p>{/if}
+        <label class="check-label"><input type="checkbox" bind:checked={rememberMe} />Remember me</label>
+        <p class="field-help">{rememberMe ? 'Stay signed in for up to 90 days without activity, and up to 1 year in total.' : 'This session lasts up to 30 days.'}</p>
+        <button class="button primary" disabled={signingIn || !!startupError}
+          >{signingIn ? (setupRequired ? 'Setting up…' : 'Signing in…') : (setupRequired ? 'Create owner account' : 'Sign in')}</button
         >
-        <p class="field-help">
-          Set up or recover the owner password with the server's setup command.
-        </p>
+        {#if !setupRequired}<p class="field-help">Recover the owner password with the server's recovery command.</p>{/if}
       </form>
     </main>
   {:else}
@@ -685,6 +766,12 @@
                   >Appearance</button
                 >
               </section>
+              <section>
+                <h2>Account</h2>
+                <p>Sign out this browser, or end every owner session.</p>
+                <button class="button secondary" onclick={() => void logout()}>Sign out</button>
+                <button class="button danger" onclick={() => (confirmingLogoutAll = true)}>Sign out all devices</button>
+              </section>
               <Tokens {profiles} onnotice={tell} />
             </div>
           {:else}<div class="page-scroll">
@@ -757,6 +844,13 @@
         onsave={savePreferences}
         onclose={() => (appearance = false)}
       />{/if}
+    {#if confirmingLogoutAll}<Dialog title="Sign out all devices" onclose={() => (confirmingLogoutAll = false)}>
+        <p class="modal-intro">This ends every owner session, including this one. You will need to sign in again on each device.</p>
+        <div class="modal-actions">
+          <button class="button secondary" disabled={loggingOutAll} onclick={() => (confirmingLogoutAll = false)}>Cancel</button>
+          <button class="button danger" disabled={loggingOutAll} onclick={() => void logoutAll()}>{loggingOutAll ? 'Signing out…' : 'Sign out all devices'}</button>
+        </div>
+      </Dialog>{/if}
     {#if profileForm}{#key `${profileForm.mode}:${profileForm.profile?.id ?? ''}`}<ProfileDialog
           {...profileForm}
           onclose={() => (profileForm = null)}

@@ -45,7 +45,7 @@ services:
       FOLDERHUG_CACHE_DIR: /cache
     volumes:
       - data:/data
-      - keys:/keys:ro
+      - keys:/keys
       - downloads:/downloads
       # Add writable host folders here, then list their container paths in FOLDERHUG_MOUNTED_ROOTS.
       # - type: bind

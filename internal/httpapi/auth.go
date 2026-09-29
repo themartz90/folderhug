@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/themartz90/folderhug/internal/auth"
 	"github.com/themartz90/folderhug/internal/catalog"
@@ -132,7 +133,15 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 	var rateMu sync.Mutex
 	attempts := make(map[string]loginAttempt)
 	hashSlots := make(chan struct{}, 2)
-	mux.HandleFunc("POST /api/v1/auth/login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/auth/setup", func(w http.ResponseWriter, r *http.Request) {
+		required, err := s.Auth.SetupRequired(r.Context())
+		if err != nil {
+			s.failure(w, r, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"setup_required": required})
+	})
+	loginOrSetup := func(w http.ResponseWriter, r *http.Request) {
 		if !s.validOrigin(r) {
 			problem(w, r, 403, "csrf_failed", "Sign in from this server's configured address.")
 			return
@@ -168,7 +177,8 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			return
 		}
 		var input struct {
-			Password string `json:"password"`
+			Password   string `json:"password"`
+			RememberMe bool   `json:"remember_me"`
 		}
 		if !decode(w, r, &input) {
 			return
@@ -177,7 +187,30 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			problem(w, r, 400, "invalid_request", "The password is too long.")
 			return
 		}
-		raw, session, err := s.Auth.Login(r.Context(), input.Password)
+		if r.URL.Path == "/api/v1/auth/setup" {
+			required, err := s.Auth.SetupRequired(r.Context())
+			if err != nil {
+				s.failure(w, r, err)
+				return
+			}
+			if !required {
+				problem(w, r, 409, "already_configured", "This installation has already been set up. Sign in instead.")
+				return
+			}
+			if !utf8.ValidString(input.Password) || utf8.RuneCountInString(input.Password) < 6 {
+				problem(w, r, 400, "invalid_request", "Choose a password with at least 6 characters.")
+				return
+			}
+			if err = s.Auth.Setup(r.Context(), input.Password); err != nil {
+				if errors.Is(err, auth.ErrAlreadySetup) {
+					problem(w, r, 409, "already_configured", "This installation has already been set up. Sign in instead.")
+				} else {
+					s.failure(w, r, err)
+				}
+				return
+			}
+		}
+		raw, session, err := s.Auth.LoginWithRemember(r.Context(), input.Password, input.RememberMe)
 		if err != nil {
 			problem(w, r, 401, "unauthenticated", "The password was not accepted.")
 			return
@@ -185,10 +218,44 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 		rateMu.Lock()
 		delete(attempts, ip)
 		rateMu.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.ExpiresAt})
+		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
 		http.SetCookie(w, &http.Cookie{Name: legacySessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		writeJSON(w, 200, session)
-	})
+	}
+	mux.HandleFunc("POST /api/v1/auth/login", loginOrSetup)
+	mux.HandleFunc("POST /api/v1/auth/setup", loginOrSetup)
+	mux.HandleFunc("POST /api/v1/auth/refresh", s.authorized(true, "", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		cookie, err := r.Cookie(SessionCookieName)
+		if err != nil {
+			cookie, err = r.Cookie(legacySessionCookieName)
+		}
+		if err != nil {
+			problem(w, r, 401, "unauthenticated", "Sign in to continue.")
+			return
+		}
+		raw, session, err := s.Auth.RenewSession(r.Context(), p, cookie.Value)
+		if err != nil {
+			s.failure(w, r, err)
+			return
+		}
+		if raw != "" {
+			http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
+		}
+		writeJSON(w, 200, session)
+	}))
+	mux.HandleFunc("POST /api/v1/auth/logout-all", s.authorized(true, "", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
+		if err := s.Auth.RevokeAllSessions(r.Context()); err != nil {
+			s.failure(w, r, err)
+			return
+		}
+		if s.Profiles != nil {
+			s.Profiles.ClearOwnerSessions()
+		}
+		for _, name := range []string{SessionCookieName, legacySessionCookieName} {
+			http.SetCookie(w, &http.Cookie{Name: name, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		}
+		w.WriteHeader(204)
+	}))
 	mux.HandleFunc("GET /api/v1/auth/session", s.authorized(true, "", func(w http.ResponseWriter, r *http.Request, p auth.Principal) { writeJSON(w, 200, p.Session()) }))
 	mux.HandleFunc("POST /api/v1/auth/logout", s.authorized(true, "", func(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		if err := s.Auth.RevokeSession(r.Context(), p.SessionID); err != nil {

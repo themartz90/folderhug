@@ -1,5 +1,22 @@
 // Generated from api/openapi.yaml. Run npm run api:generate to update.
 export interface paths {
+    "/auth/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSetupStatus"];
+        put?: never;
+        /** @description Claim a fresh installation once. Requires the configured Origin and a JSON body. Passwords need at least six Unicode characters and at most 1024 UTF-8 bytes. */
+        post: operations["setupOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -374,6 +391,40 @@ export interface paths {
         get: operations["listDestinations"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Revoke every owner session and clear their temporary source credentials. API tokens remain valid. Requires Origin and X-CSRF-Token. */
+        post: operations["logoutAllDevices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Renew a remembered session's 90-day inactivity deadline, up to one year after login. Rotate its cookie periodically. Normal sessions keep their original 30-day expiry. Requires Origin and X-CSRF-Token. */
+        post: operations["refreshSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1225,6 +1276,11 @@ export interface components {
             content: {
                 "application/json": {
                     password: string;
+                    /**
+                     * @description Keep this device signed in with a renewable 90-day inactivity limit and a one-year maximum.
+                     * @default false
+                     */
+                    remember_me?: boolean;
                 };
             };
         };
@@ -1239,6 +1295,49 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSetupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether this fresh installation is ready to create its owner. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        setup_required: boolean;
+                    };
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    setupOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["Login"];
+        responses: {
+            200: components["responses"]["Session"];
+            /** @description This installation has already been configured. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -1794,6 +1893,38 @@ export interface operations {
                     };
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    logoutAllDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All owner sessions were revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    refreshSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Session"];
             default: components["responses"]["Error"];
         };
     };

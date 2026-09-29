@@ -25,34 +25,45 @@ var (
 	ErrNotFound        = errors.New("authentication record not found")
 )
 
-const SessionLifetime = 24 * time.Hour
+const SessionLifetime = 30 * 24 * time.Hour
+const RememberedIdleLifetime = 90 * 24 * time.Hour
+const RememberedAbsoluteLifetime = 365 * 24 * time.Hour
+const sessionRotationInterval = 24 * time.Hour
+const previousSecretGrace = 2 * time.Minute
 const passwordPrefix = "$argon2id$v=19$m=65536,t=3,p=2$"
 
 type Service struct {
 	db        *sql.DB
 	hashSlot  chan struct{}
 	authority sync.RWMutex
+	now       func() time.Time
 }
 
-func New(db *sql.DB) *Service { return &Service{db: db, hashSlot: make(chan struct{}, 1)} }
+func New(db *sql.DB) *Service {
+	return &Service{db: db, hashSlot: make(chan struct{}, 1), now: time.Now}
+}
 
 type Session struct {
-	Authenticated bool      `json:"authenticated"`
-	CSRFToken     string    `json:"csrf_token"`
-	ExpiresAt     time.Time `json:"expires_at"`
+	Authenticated   bool      `json:"authenticated"`
+	CSRFToken       string    `json:"csrf_token"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	CookieExpiresAt time.Time `json:"-"`
 }
 
 type Principal struct {
-	Owner      bool
-	CreatorID  string
-	SessionID  string
-	CSRFToken  string
-	ExpiresAt  time.Time
-	ProfileIDs []string
-	Scopes     []string
+	Owner           bool
+	CreatorID       string
+	SessionID       string
+	CSRFToken       string
+	ExpiresAt       time.Time
+	CookieExpiresAt time.Time
+	ProfileIDs      []string
+	Scopes          []string
 }
 
-func (p Principal) Session() Session { return Session{p.Owner, p.CSRFToken, p.ExpiresAt} }
+func (p Principal) Session() Session {
+	return Session{Authenticated: p.Owner, CSRFToken: p.CSRFToken, ExpiresAt: p.ExpiresAt, CookieExpiresAt: p.CookieExpiresAt}
+}
 
 func (p Principal) Can(profileID, scope string) bool {
 	if p.CreatorID == "" || (!p.ExpiresAt.IsZero() && !time.Now().Before(p.ExpiresAt)) {
@@ -90,7 +101,7 @@ func randomBytes(n int) []byte     { b := make([]byte, n); _, _ = rand.Read(b); 
 func secretHash(raw string) []byte { sum := sha256.Sum256([]byte(raw)); return sum[:] }
 
 func validPassword(password string) bool {
-	return utf8.ValidString(password) && utf8.RuneCountInString(password) >= 12 && len(password) <= 1024
+	return utf8.ValidString(password) && utf8.RuneCountInString(password) >= 6 && len(password) <= 1024
 }
 
 func (s *Service) passwordWork(ctx context.Context, work func() string) (string, error) {
@@ -149,7 +160,19 @@ func (s *Service) Setup(ctx context.Context, password string) error {
 	if err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO owner_auth(id,password_hash) VALUES(1,?) ON CONFLICT(id) DO NOTHING`, hash)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var complete int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM settings WHERE key='owner_setup_complete'`).Scan(&complete); err != nil {
+		return err
+	}
+	if complete != 0 {
+		return ErrAlreadySetup
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO owner_auth(id,password_hash) VALUES(1,?) ON CONFLICT(id) DO NOTHING`, hash)
 	if err != nil {
 		return err
 	}
@@ -160,7 +183,13 @@ func (s *Service) Setup(ctx context.Context, password string) error {
 	if n != 1 {
 		return ErrAlreadySetup
 	}
-	return nil
+	if _, err := tx.ExecContext(ctx, `INSERT INTO settings(key,value) VALUES('owner_setup_complete','1')`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key='owner_setup_pending'`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Service) Recover(ctx context.Context, password string) error {
@@ -196,6 +225,10 @@ func (s *Service) Recover(ctx context.Context, password string) error {
 }
 
 func (s *Service) Login(ctx context.Context, password string) (string, Session, error) {
+	return s.LoginWithRemember(ctx, password, false)
+}
+
+func (s *Service) LoginWithRemember(ctx context.Context, password string, remember bool) (string, Session, error) {
 	var hash string
 	if err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM owner_auth WHERE id=1`).Scan(&hash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -207,9 +240,18 @@ func (s *Service) Login(ctx context.Context, password string) (string, Session, 
 		return "", Session{}, ErrUnauthenticated
 	}
 	raw := randomSecret()
-	session := Session{true, randomSecret(), time.Now().UTC().Add(SessionLifetime).Truncate(time.Second)}
+	now := s.now().UTC().Truncate(time.Second)
+	absolute := now.Add(SessionLifetime)
+	if remember {
+		absolute = now.Add(RememberedAbsoluteLifetime)
+	}
+	expires := absolute
+	if remember {
+		expires = now.Add(RememberedIdleLifetime)
+	}
+	session := Session{Authenticated: true, CSRFToken: randomSecret(), ExpiresAt: expires, CookieExpiresAt: absolute}
 	// A recovery between password verification and insertion must not create a session.
-	result, err := s.db.ExecContext(ctx, `INSERT INTO auth_sessions(id,secret_hash,csrf_token,expires_at) SELECT ?,?,?,? FROM owner_auth WHERE id=1 AND password_hash=?`, randomSecret(), secretHash(raw), session.CSRFToken, session.ExpiresAt.Unix(), hash)
+	result, err := s.db.ExecContext(ctx, `INSERT INTO auth_sessions(id,secret_hash,csrf_token,expires_at,remembered,absolute_expires_at,last_rotated_at) SELECT ?,?,?,?,?,?,? FROM owner_auth WHERE id=1 AND password_hash=?`, randomSecret(), secretHash(raw), session.CSRFToken, session.ExpiresAt.Unix(), remember, absolute.Unix(), now.Unix(), hash)
 	if err != nil {
 		return "", Session{}, err
 	}
@@ -232,8 +274,10 @@ func (s *Service) Authenticate(ctx context.Context, sessionCookie, bearer string
 		return Principal{}, ErrUnauthenticated
 	}
 	var p Principal
-	var expires int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,csrf_token,expires_at FROM auth_sessions WHERE secret_hash=? AND expires_at>?`, secretHash(sessionCookie), time.Now().Unix()).Scan(&p.SessionID, &p.CSRFToken, &expires)
+	var expires, absolute int64
+	now := s.now().Unix()
+	hash := secretHash(sessionCookie)
+	err := s.db.QueryRowContext(ctx, `SELECT id,csrf_token,expires_at,absolute_expires_at FROM auth_sessions WHERE expires_at>? AND (absolute_expires_at>? OR (remembered=0 AND absolute_expires_at=0)) AND (secret_hash=? OR (previous_secret_hash=? AND previous_expires_at>?))`, now, now, hash, hash, now).Scan(&p.SessionID, &p.CSRFToken, &expires, &absolute)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Principal{}, ErrUnauthenticated
 	}
@@ -243,14 +287,87 @@ func (s *Service) Authenticate(ctx context.Context, sessionCookie, bearer string
 	p.Owner = true
 	p.CreatorID = "owner"
 	p.ExpiresAt = time.Unix(expires, 0).UTC()
+	if absolute == 0 {
+		absolute = expires
+	}
+	p.CookieExpiresAt = time.Unix(absolute, 0).UTC()
 	return p, nil
 }
 
 func (s *Service) Logout(ctx context.Context, rawCookie string) error {
 	s.authority.Lock()
 	defer s.authority.Unlock()
-	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE secret_hash=?`, secretHash(rawCookie))
+	if rawCookie == "" || len(rawCookie) > 128 {
+		return nil
+	}
+	hash := secretHash(rawCookie)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE secret_hash=? OR previous_secret_hash=?`, hash, hash)
 	return err
+}
+
+func (s *Service) RevokeAllSessions(ctx context.Context) error {
+	s.authority.Lock()
+	defer s.authority.Unlock()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_sessions`)
+	return err
+}
+
+// RenewSession extends remembered idle time after a real session request. A
+// previous cookie remains valid briefly for parallel requests but never replaces
+// the browser's newer cookie.
+func (s *Service) RenewSession(ctx context.Context, principal Principal, rawCookie string) (string, Session, error) {
+	if !principal.Owner || principal.CreatorID != "owner" || principal.SessionID == "" || rawCookie == "" || len(rawCookie) > 128 {
+		return "", Session{}, ErrUnauthenticated
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", Session{}, err
+	}
+	defer tx.Rollback()
+	now := s.now().UTC().Truncate(time.Second)
+	var csrf string
+	var currentHash, previousHash []byte
+	var expires, absolute, lastRotation, previousExpires int64
+	var remembered bool
+	err = tx.QueryRowContext(ctx, `SELECT csrf_token,secret_hash,previous_secret_hash,expires_at,absolute_expires_at,last_rotated_at,previous_expires_at,remembered FROM auth_sessions WHERE id=?`, principal.SessionID).Scan(&csrf, &currentHash, &previousHash, &expires, &absolute, &lastRotation, &previousExpires, &remembered)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", Session{}, ErrUnauthenticated
+	}
+	if err != nil {
+		return "", Session{}, err
+	}
+	hash := secretHash(rawCookie)
+	isCurrent := subtle.ConstantTimeCompare(hash, currentHash) == 1
+	isPrevious := subtle.ConstantTimeCompare(hash, previousHash) == 1 && previousExpires > now.Unix()
+	if (!isCurrent && !isPrevious) || expires <= now.Unix() || (absolute == 0 && remembered) || (absolute != 0 && absolute <= now.Unix()) {
+		return "", Session{}, ErrUnauthenticated
+	}
+	replacement := ""
+	if remembered {
+		next := now.Add(RememberedIdleLifetime).Unix()
+		if next > absolute {
+			next = absolute
+		}
+		if next > expires {
+			expires = next
+		}
+		if isCurrent && now.Unix()-lastRotation >= int64(sessionRotationInterval/time.Second) {
+			replacement = randomSecret()
+			_, err = tx.ExecContext(ctx, `UPDATE auth_sessions SET secret_hash=?,previous_secret_hash=?,previous_expires_at=?,expires_at=?,last_rotated_at=? WHERE id=?`, secretHash(replacement), currentHash, now.Add(previousSecretGrace).Unix(), expires, now.Unix(), principal.SessionID)
+		} else {
+			_, err = tx.ExecContext(ctx, `UPDATE auth_sessions SET expires_at=? WHERE id=?`, expires, principal.SessionID)
+		}
+		if err != nil {
+			return "", Session{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", Session{}, err
+	}
+	if absolute == 0 {
+		absolute = expires
+	}
+	return replacement, Session{Authenticated: true, CSRFToken: csrf, ExpiresAt: time.Unix(expires, 0).UTC(), CookieExpiresAt: time.Unix(absolute, 0).UTC()}, nil
 }
 func (s *Service) RevokeSession(ctx context.Context, id string) error {
 	s.authority.Lock()
@@ -398,8 +515,9 @@ func (s *Service) Refresh(ctx context.Context, principal Principal) (Principal, 
 		if principal.CreatorID != "owner" || principal.SessionID == "" {
 			return p, ErrUnauthenticated
 		}
-		var expires int64
-		err := s.db.QueryRowContext(ctx, `SELECT id,csrf_token,expires_at FROM auth_sessions WHERE id=? AND expires_at>?`, principal.SessionID, time.Now().Unix()).Scan(&p.SessionID, &p.CSRFToken, &expires)
+		var expires, absolute int64
+		now := s.now().Unix()
+		err := s.db.QueryRowContext(ctx, `SELECT id,csrf_token,expires_at,absolute_expires_at FROM auth_sessions WHERE id=? AND expires_at>? AND (absolute_expires_at>? OR (remembered=0 AND absolute_expires_at=0))`, principal.SessionID, now, now).Scan(&p.SessionID, &p.CSRFToken, &expires, &absolute)
 		if errors.Is(err, sql.ErrNoRows) {
 			return p, ErrUnauthenticated
 		}
@@ -409,6 +527,10 @@ func (s *Service) Refresh(ctx context.Context, principal Principal) (Principal, 
 		p.Owner = true
 		p.CreatorID = "owner"
 		p.ExpiresAt = time.Unix(expires, 0).UTC()
+		if absolute == 0 {
+			absolute = expires
+		}
+		p.CookieExpiresAt = time.Unix(absolute, 0).UTC()
 		return p, nil
 	}
 	if principal.CreatorID == "" || principal.SessionID != "" {

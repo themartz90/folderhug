@@ -6,24 +6,23 @@ Use Go 1.27.1, Node 24, and npm 11.5.1 or newer within major version 11. The rep
 
 After building the frontend, run `go run ./cmd/folderhug dev` from the repository root and open `http://localhost:8080`. This command creates its own state in `.local/dev` and signs you in automatically. No setup command or password entry is needed. It accepts only loopback connections and a localhost or loopback public URL. Keep it local; do not expose it through a proxy or tunnel.
 
-Development mode keeps profiles and downloads between restarts. It generates an owner secret and credential key inside `.local/dev/keys`; keep those with the development database. Existing normal app data is separate. The optional video worker is disabled in this mode. Restart the command after signing out or when the 24-hour session expires.
+Development mode keeps profiles and downloads between restarts. It generates an owner secret and credential key inside `.local/dev/keys`; keep those with the development database. Existing normal app data is separate. The optional video worker is disabled in this mode. Restart the command after signing out or when the 30-day session expires.
 
 For frontend hot reload, use the two-terminal workflow below, replacing `go run ./cmd/folderhug` with `go run ./cmd/folderhug dev` in the backend terminal.
 
-## Build and initialize
+## Build and run
 
 ```powershell
 cd web
 npm ci
 npm run build
 cd ..
-go run ./cmd/folderhug setup
 go run ./cmd/folderhug
 ```
 
-Open `http://localhost:8080`. The hostname matters: the app rejects a Host header that differs from `FOLDERHUG_PUBLIC_URL`. With the defaults, opening `http://127.0.0.1:8080` instead is not equivalent.
+Open `http://localhost:8080` and create the owner password in the browser. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. The hostname matters: the app rejects a Host header that differs from `FOLDERHUG_PUBLIC_URL`. With the defaults, opening `http://127.0.0.1:8080` instead is not equivalent.
 
-The setup command creates the owner account and `.local/keys/credentials.key`. It refuses to overwrite an existing owner. Do not run two app instances against the same state directory. Stop the app with Ctrl+C before password recovery or copying its state.
+The app creates `.local/keys/credentials.key` on a fresh installation. The CLI `setup` command is optional when you need to initialize the owner before opening the browser. The first visitor to a fresh installation can claim the owner account, so complete setup before exposing the address. Do not run two app instances against the same state directory. Stop the app with Ctrl+C before password recovery or copying its state.
 
 Build a native executable after the frontend:
 

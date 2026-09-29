@@ -50,6 +50,14 @@ export function setSession(session: Schema['Session'] | null, onExpired?: () => 
   expired = onExpired;
 }
 
+// A refresh extends a remembered cookie without replacing the active session.
+export async function refreshSession(): Promise<void> {
+  const generation = sessionGeneration;
+  const session = await api<Schema['Session']>('/auth/refresh', { method: 'POST' });
+  requireCurrent(generation);
+  csrf = session.csrf_token;
+}
+
 function requireCurrent(generation: number) {
   if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError');
 }

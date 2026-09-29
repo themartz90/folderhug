@@ -403,6 +403,18 @@ func (s *Service) ClearPrincipal(leaseID string) {
 	}
 }
 
+// ClearOwnerSessions drops session-only credentials without changing API-token leases.
+func (s *Service) ClearOwnerSessions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, l := range s.leases {
+		if strings.Contains(key, "\x00session:") {
+			l.cancel()
+			delete(s.leases, key)
+		}
+	}
+}
+
 // Access ties upstream work to both profile configuration and its credential lease.
 func (s *Service) Access(ctx context.Context, id, leaseID string) (Profile, *upstream.Credentials, context.Context, context.CancelFunc, error) {
 	s.changes.RLock()

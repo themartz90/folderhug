@@ -7,14 +7,13 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const temporary = await mkdtemp(join(tmpdir(), 'folderhug-web-build-'));
 const binary = join(temporary, process.platform === 'win32' ? 'web-fixture.exe' : 'web-fixture');
-let child;
+const fixtures = [];
 let stopping = false;
 
 async function stop() {
   if (stopping) return;
   stopping = true;
-  if (child && child.exitCode === null) {
-    const current = child;
+  for (const current of fixtures) if (current.exitCode === null) {
     // The Go fixture treats stdin EOF as shutdown and removes its runtime data.
     if (current.stdin) current.stdin.end();
     else current.kill('SIGTERM');
@@ -38,19 +37,30 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 
 async function command(program, args, cwd = root, input = 'ignore') {
   const current = spawn(program, args, { cwd, stdio: [input, 'inherit', 'inherit'], windowsHide: true, detached: process.platform !== 'win32' });
-  child = current;
   const code = await new Promise((done, reject) => {
-    current.once('error', (error) => { child = undefined; reject(error); });
+    current.once('error', reject);
     current.once('exit', done);
   });
   if (code !== 0 && !stopping) throw new Error(`${program} exited with ${code}`);
+}
+
+function fixture(args) {
+  const current = spawn(binary, args, { cwd: root, stdio: ['pipe', 'inherit', 'inherit'], windowsHide: true, detached: process.platform !== 'win32' });
+  fixtures.push(current);
+  return new Promise((done, reject) => {
+    current.once('error', reject);
+    current.once('exit', (code) => code === 0 || stopping ? done() : reject(new Error(`web-fixture exited with ${code}`)));
+  });
 }
 
 try {
   // Invoke the JS CLI directly so shutdown has no shell or npm grandchildren.
   await command(process.execPath, [join(root, 'web/node_modules/vite/bin/vite.js'), 'build'], join(root, 'web'));
   if (!stopping) await command('go', ['build', '-tags=webfixture', '-o', binary, './cmd/web-fixture']);
-  if (!stopping) await command(binary, ['--runtime-dir', join(temporary, 'runtime')], root, 'pipe');
+  if (!stopping) await Promise.all([
+    fixture(['--runtime-dir', join(temporary, 'runtime')]),
+    fixture(['--runtime-dir', join(temporary, 'unclaimed'), '--unclaimed']),
+  ]);
 } finally {
   await stop();
 }

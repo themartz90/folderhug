@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, endpoint, setSession } from './api';
+import { api, ApiError, currentSession, endpoint, refreshSession, setSession } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,5 +58,29 @@ describe('API client', () => {
     complete(new Response('{}', { status: 401 }));
     await expect(request).rejects.toMatchObject({ name: 'AbortError' });
     expect(onExpired).not.toHaveBeenCalled();
+  });
+  it('refreshes with CSRF while keeping the active session generation', async () => {
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      authenticated: true, csrf_token: 'renewed-csrf', expires_at: '2030-01-02T00:00:00Z',
+    })));
+    vi.stubGlobal('fetch', fetcher);
+    setSession({ authenticated: true, csrf_token: 'original-csrf', expires_at: '2030-01-01T00:00:00Z' });
+    const generation = currentSession();
+    await refreshSession();
+    expect(currentSession()).toBe(generation);
+    const [url, options] = fetcher.mock.calls[0]!;
+    expect(url).toBe('/api/v1/auth/refresh');
+    expect(options.headers.get('X-CSRF-Token')).toBe('original-csrf');
+    await api('/preferences', { method: 'PUT', body: {} });
+    expect(fetcher.mock.calls[1]![1].headers.get('X-CSRF-Token')).toBe('renewed-csrf');
+  });
+  it('cannot apply a late refresh after a different session starts', async () => {
+    let complete!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => (complete = resolve))));
+    setSession({ authenticated: true, csrf_token: 'old', expires_at: '2030-01-01T00:00:00Z' });
+    const pending = refreshSession();
+    setSession({ authenticated: true, csrf_token: 'new', expires_at: '2030-01-01T00:00:00Z' });
+    complete(new Response(JSON.stringify({ authenticated: true, csrf_token: 'stale', expires_at: '2030-01-01T00:00:00Z' })));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

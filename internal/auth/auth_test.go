@@ -73,7 +73,7 @@ func TestCredentialInstallationSerializesWithRevocation(t *testing.T) {
 func TestOwnerSessionLifecycle(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()
-	if err := s.Setup(ctx, "too short"); !errors.Is(err, ErrInvalid) {
+	if err := s.Setup(ctx, "short"); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 	if err := s.Setup(ctx, strings.Repeat("a", 1025)); !errors.Is(err, ErrInvalid) {

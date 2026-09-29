@@ -6,12 +6,15 @@ The core deployment uses one app container and SQLite. The default `compose.yaml
 
 ```sh
 docker compose pull
-docker compose --profile tools run --rm setup
 docker compose up -d app
 docker compose ps
 ```
 
-Setup prompts for an owner password of at least 12 characters. It refuses to replace an existing owner. Open `http://localhost:8080` on the host and sign in. The port binds to loopback by default. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
+Open `http://localhost:8080` on the host. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Finish this step before exposing the address to anyone else, since the first visitor can claim the owner account.
+
+The port binds to loopback by default. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
+
+The CLI setup command remains available for an operator who needs to initialize the owner before opening the browser: `docker compose --profile tools run --rm setup`. It prompts in the terminal and refuses to replace an existing owner. It is optional for an ordinary first start.
 
 Keep the same Compose project name and file when updating an installation. Changing the project name selects different named volumes. Do not run multiple app instances against the same database. The default project name remains `http-wrapper` to preserve existing volumes. For a fresh installation, you can use `-p folderhug` on every Compose command. If you already started with `-p`, keep that same value.
 
@@ -22,8 +25,7 @@ Clone the repository to get the build context and use `compose.build.yaml` as an
 ```sh
 git clone https://github.com/themartz90/folderhug.git
 cd folderhug
-docker compose -f compose.yaml -f compose.build.yaml build app setup
-docker compose -f compose.yaml -f compose.build.yaml --profile tools run --rm setup
+docker compose -f compose.yaml -f compose.build.yaml build app
 docker compose -f compose.yaml -f compose.build.yaml up -d app
 ```
 
@@ -64,7 +66,7 @@ The session cookie is `folderhug_session`. The database filename and stored encr
 | `FOLDERHUG_MEDIA_SOCKET` | unset | Optional worker broker socket |
 | `FOLDERHUG_WORKER_KEY` | `.local/worker-key/worker.key` | Separate app-to-worker authentication key |
 
-Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. It mounts `/keys` read-only in the app. The setup service writes the key as UID/GID 10001. Keep that ownership when restoring files. A writable host folder used as a mounted download destination also needs access for UID/GID 10001; check its existing permissions before changing ownership or mode.
+Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. The app needs write access to `/keys` on a fresh installation so it can create `credentials.key`. It runs as UID/GID 10001; keep that ownership when restoring files. A writable host folder used as a mounted download destination also needs access for UID/GID 10001; check its existing permissions before changing ownership or mode.
 
 The public URL is an origin, with no path, query, fragment, or credentials. A reverse proxy must preserve the public Host and Origin headers and forward to the loopback app port. Configure HTTPS at that proxy, disable response buffering for streaming downloads, and allow long responses and server-sent events. Forwarded headers do not replace the app's configured origin. Deployment under a URL subpath is not supported.
 
@@ -79,6 +81,12 @@ Private upstream addresses are rejected by default. An operator may provide a JS
 ```
 
 Mount that file read-only and set `FOLDERHUG_UPSTREAM_ALLOW_FILE` to its container path. The file is limited to 64 KiB and 128 rules. Rules do not permit loopback, link-local, or metadata destinations. Do not turn a broad network range into a substitute for choosing the intended source.
+
+## Owner sessions
+
+A normal sign-in creates a persistent browser session that lasts up to 30 days, including across app restarts. **Remember me** is optional. Using the app can extend its expiry to 90 days after the latest activity, but never beyond 365 days from login.
+
+**Sign out all devices** revokes every owner browser session, including the current one. It does not revoke API tokens; revoke those separately in Settings if needed. Owner password recovery revokes both browser sessions and API tokens.
 
 ## Interrupted scans
 
@@ -136,7 +144,7 @@ docker compose -p folderhug-restore up -d app
 
 Stop if any extraction fails. Confirm readiness, owner login, preferences, bookmarks, indexed results, and downloaded file checksums. Check a remembered profile with a bounded listing request if appropriate. Jobs interrupted by shutdown need an explicit resume or retry; a restored database is not evidence that an upstream representation is unchanged.
 
-A restored database also restores its authentication records. Use owner recovery if those sessions and tokens must be revoked. A missing encryption key cannot be replaced by generating another key: the app checks the key against the database and refuses a mismatch. Restore the original matching key.
+A restored database also restores its authentication records. Use owner recovery if those sessions and tokens must be revoked. After setup is complete, a missing owner record or credential key does not reopen the first-run screen. Restore the matching database and original key; generating a new key will fail the database key check. Recovery is for a forgotten password when the database and key are intact.
 
 ## Update and owner recovery
 

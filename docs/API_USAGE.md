@@ -69,6 +69,10 @@ Use `content:read` to stream source content or a completed job's file. For sourc
 
 ## Authentication and errors
 
+On a fresh installation, `GET /auth/setup` returns `setup_required: true` until the owner account is created. The first visitor can claim it with `POST /auth/setup`, so complete setup before exposing the app to anyone else. Setup accepts a password of at least 6 Unicode characters and at most 1,024 UTF-8 bytes, with no required character types. Once setup is complete, use `POST /auth/login`; setup will not reopen if the owner record or credential key is missing.
+
+Login and setup accept `remember_me: true` to request a remembered browser session. A normal session lasts up to 30 days. A remembered session can renew to 90 days after activity, capped at 365 days from login. `POST /auth/refresh` renews an authenticated owner session; `POST /auth/logout-all` revokes all owner browser sessions but leaves API tokens active. Owner recovery revokes both sessions and API tokens.
+
 | Scope | Access within the token's listed profiles |
 | --- | --- |
 | `browse:read` | Profiles, listings, metadata, indexed search, scan reads and exports |
@@ -79,7 +83,7 @@ Use `content:read` to stream source content or a completed job's file. For sourc
 
 Scopes are independent. A download script that first browses needs both `browse:read` and `downloads:write`. Owner-only actions include profile configuration and testing, remembered credentials, token management, preferences, bookmarks, and completed-file deletion. Tokens cannot borrow an owner's temporary credentials or control another token's jobs. Revocation or expiry stops authorized in-flight work.
 
-An invalid bearer token never falls back to an owner cookie. Cookie-based clients must send the `X-CSRF-Token` returned by `GET /auth/session` and the configured `Origin` on mutations. Login checks Origin without requiring an existing CSRF token. Do not put either owner or source passwords in URLs.
+An invalid bearer token never falls back to an owner cookie. Cookie-based clients must send the `X-CSRF-Token` returned by `GET /auth/session` and the configured `Origin` on authenticated mutations, including refresh and sign-out. Setup and login check `Origin` but do not require an existing CSRF token. Do not put either owner or source passwords in URLs.
 
 Errors contain `code`, `message`, and `request_id`. A `401` means app authentication is missing or invalid; source authentication failures have a separate upstream error. Missing and inaccessible objects are not disclosed to token callers. Respect `Retry-After` on `429` and `503` responses.
 

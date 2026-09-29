@@ -15,14 +15,17 @@ mkdir folderhug
 cd folderhug
 curl -fL https://raw.githubusercontent.com/themartz90/folderhug/main/compose.yaml -o compose.yaml
 docker compose pull
-docker compose --profile tools run --rm setup
 docker compose up -d app
 docker compose ps
 ```
 
-Setup asks for an owner password of at least 12 characters. Open `http://localhost:8080` and sign in. The default port binds to loopback; remote access needs an HTTPS reverse proxy and a matching public URL. The database, credential key, downloads, and thumbnail cache use separate named volumes. See [operations and backups](docs/OPERATIONS.md) before changing the address or upgrading an installation.
+Open `http://localhost:8080` on the host and create the owner password in the browser. The first visitor to a fresh installation can claim the owner account, so complete setup before exposing the address to anyone else. The password needs at least 6 characters, with no required character types, and can be up to 1,024 UTF-8 bytes.
 
-The default Compose file pulls `ghcr.io/themartz90/folderhug:latest`. Set `FOLDERHUG_IMAGE` when you need a specific tag or digest. The same reference is used for owner setup and the app. The [optional media worker](docs/MEDIA_WORKER.md) uses a separate Compose file.
+The app creates its credential key on first start. Keep it with your backups; the app needs the same key to open an existing installation. The default port binds to loopback. Remote access needs an HTTPS reverse proxy and a matching public URL. See [operations and backups](docs/OPERATIONS.md) before changing the address or upgrading an installation.
+
+A normal sign-in lasts up to 30 days. **Remember me** keeps the session renewable for up to 90 days without activity, with a one-year limit from login.
+
+The default Compose file pulls `ghcr.io/themartz90/folderhug:latest`. Set `FOLDERHUG_IMAGE` when you need a specific tag or digest. The [optional media worker](docs/MEDIA_WORKER.md) uses a separate Compose file.
 
 To build from source, clone the [repository](https://github.com/themartz90/folderhug) and use the `compose.build.yaml` override described in [operations](docs/OPERATIONS.md).
 
@@ -57,7 +60,7 @@ cd ..
 go run ./cmd/folderhug dev
 ```
 
-Open `http://localhost:8080` and add a directory listing URL. Development mode signs you in automatically, uses separate state in `.local/dev`, and listens on loopback only. For an owner account outside development mode, use `go run ./cmd/folderhug setup` followed by `go run ./cmd/folderhug`. Setup asks for a password of at least 12 characters. Keep its credential key with your backups; losing it prevents access to remembered source passwords.
+Open `http://localhost:8080` and add a directory listing URL. Development mode signs you in automatically, uses separate state in `.local/dev`, and listens on loopback only. For a normal owner account outside development mode, run `go run ./cmd/folderhug`, then create the password in the browser. The CLI `setup` command remains available for automation.
 
 For hot reload, tests, and browser fixtures, see [Windows development](docs/DEVELOPMENT.md). Native development does not need Docker or WSL.
 

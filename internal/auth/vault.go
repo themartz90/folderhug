@@ -43,7 +43,7 @@ func LoadVault(path string) (*Vault, error) {
 	return vaultFromKey(key)
 }
 
-// CreateVault is for explicit setup only. Existing keys are never overwritten.
+// CreateVault initializes a fresh installation. Existing keys are never overwritten.
 func CreateVault(path string) (*Vault, error) {
 	key := randomBytes(32)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)

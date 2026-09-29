@@ -36,8 +36,6 @@ import (
 	"github.com/themartz90/folderhug/internal/webui"
 )
 
-const appOrigin = "http://127.0.0.1:4173"
-const controlAddress = "127.0.0.1:4174"
 const ownerPassword = "synthetic owner password"
 const controlKey = "synthetic-local-control"
 
@@ -64,9 +62,22 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	unclaimed := len(os.Args) == 4 && os.Args[3] == "--unclaimed"
+	appOrigin := "http://127.0.0.1:4173"
+	controlAddress := "127.0.0.1:4174"
+	if unclaimed {
+		appOrigin = "http://127.0.0.1:4175"
+		controlAddress = "127.0.0.1:4176"
+	}
 	owner := auth.New(db.DB)
-	if err := owner.Setup(ctx, ownerPassword); err != nil {
-		return err
+	if unclaimed {
+		if _, err := db.DB.ExecContext(ctx, "INSERT INTO settings(key,value) VALUES('owner_setup_pending','1')"); err != nil {
+			return err
+		}
+	} else {
+		if err := owner.Setup(ctx, ownerPassword); err != nil {
+			return err
+		}
 	}
 	vault, err := auth.CreateVault(filepath.Join(dir, "credentials.key"))
 	if err != nil {
@@ -119,17 +130,19 @@ func run() error {
 		return preferences.Status{ImageThumbnails: true, VideoWorker: "disabled", CacheMaxBytes: cfg.ThumbnailCacheBytes, StreamMaxBytes: cfg.StreamMaxBytes, ServerDownloads: true, SegmentedDownloads: true}, nil
 	}
 	seeded := make(map[string]profiles.Profile)
-	for index, seed := range []struct{ key, name, path, auth string }{
-		{"library", "Synthetic library", "library", "none"},
-		{"locked", "Locked source", "locked", "basic"},
-		{"offline", "Offline source", "offline", "none"},
-		{"unsupported", "Unsupported source", "unsupported", "none"},
-	} {
-		profile, err := profileService.Create(ctx, profiles.Input{Name: seed.name, RootURL: "http://fixture.example.test/" + seed.path + "/", AuthType: seed.auth, AllowHTTP: true, Position: index}, auth.Principal{Owner: true, CreatorID: "owner"})
-		if err != nil {
-			return err
+	if !unclaimed {
+		for index, seed := range []struct{ key, name, path, auth string }{
+			{"library", "Synthetic library", "library", "none"},
+			{"locked", "Locked source", "locked", "basic"},
+			{"offline", "Offline source", "offline", "none"},
+			{"unsupported", "Unsupported source", "unsupported", "none"},
+		} {
+			profile, err := profileService.Create(ctx, profiles.Input{Name: seed.name, RootURL: "http://fixture.example.test/" + seed.path + "/", AuthType: seed.auth, AllowHTTP: true, Position: index}, auth.Principal{Owner: true, CreatorID: "owner"})
+			if err != nil {
+				return err
+			}
+			seeded[seed.key] = profile
 		}
-		seeded[seed.key] = profile
 	}
 	control := http.NewServeMux()
 	control.HandleFunc("GET /info", func(w http.ResponseWriter, r *http.Request) {
@@ -199,8 +212,8 @@ func runtimeDirectory() (string, error) {
 	if len(os.Args) == 1 {
 		return os.MkdirTemp("", "folderhug-web-fixture-")
 	}
-	if len(os.Args) != 3 || os.Args[1] != "--runtime-dir" || !filepath.IsAbs(os.Args[2]) {
-		return "", fmt.Errorf("usage: web-fixture [--runtime-dir ABSOLUTE_NEW_DIRECTORY]")
+	if (len(os.Args) != 3 && !(len(os.Args) == 4 && os.Args[3] == "--unclaimed")) || os.Args[1] != "--runtime-dir" || !filepath.IsAbs(os.Args[2]) {
+		return "", fmt.Errorf("usage: web-fixture [--runtime-dir ABSOLUTE_NEW_DIRECTORY [--unclaimed]]")
 	}
 	dir := filepath.Clean(os.Args[2])
 	// Mkdir must succeed so cleanup only removes a directory this process made.

@@ -3,8 +3,6 @@ package appcli
 import (
 	"bufio"
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,24 +38,7 @@ func configureOwner(ctx context.Context, command string, args []string, cfg conf
 	keyPath := filepath.Join(cfg.KeysDir, "credentials.key")
 	var vault *auth.Vault
 	if command == "setup" {
-		if err = os.MkdirAll(cfg.KeysDir, 0700); err != nil {
-			return fmt.Errorf("cannot create keys directory")
-		}
-		if _, statErr := os.Lstat(keyPath); errors.Is(statErr, os.ErrNotExist) {
-			vault, err = auth.CreateVault(keyPath)
-		} else {
-			vault, err = auth.LoadVault(keyPath)
-		}
-		if err != nil {
-			return err
-		}
-		var check string
-		err = db.DB.QueryRowContext(ctx, "SELECT value FROM settings WHERE key='credential_key_check'").Scan(&check)
-		if errors.Is(err, sql.ErrNoRows) {
-			err = auth.InitializeKeyCheck(ctx, db.DB, vault)
-		} else if err == nil {
-			err = auth.VerifyKey(ctx, db.DB, vault)
-		}
+		_, err = prepareVault(ctx, cfg, db)
 		if err != nil {
 			return err
 		}
@@ -95,7 +76,7 @@ func readPassword(stdin bool) ([]byte, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return nil, fmt.Errorf("setup needs a terminal; use --password-stdin only with protected input")
 	}
-	fmt.Fprint(os.Stderr, "Owner password (at least 12 characters): ")
+	fmt.Fprint(os.Stderr, "Owner password (at least 6 characters): ")
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {

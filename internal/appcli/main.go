@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -78,6 +77,9 @@ func run() error {
 			return err
 		}
 	}
+	if err = checkMissingDatabase(cfg); err != nil {
+		return err
+	}
 	db, err := store.Open(cfg.DataDir)
 	if err != nil {
 		return err
@@ -90,6 +92,10 @@ func run() error {
 	if len(os.Args) > 2 {
 		return fmt.Errorf("serve does not accept arguments")
 	}
+	vault, err := prepareVault(context.Background(), cfg, db)
+	if err != nil {
+		return err
+	}
 	var devCookie string
 	if command == "dev" {
 		devCookie, err = devSession(context.Background(), cfg, db, owner)
@@ -98,13 +104,6 @@ func run() error {
 		}
 		defer owner.Logout(context.Background(), devCookie)
 		slog.Info("Local development mode: automatic sign-in, separate data in .local/dev")
-	}
-	vault, err := auth.LoadVault(filepath.Join(cfg.KeysDir, "credentials.key"))
-	if err != nil {
-		return err
-	}
-	if err = auth.VerifyKey(context.Background(), db.DB, vault); err != nil {
-		return err
 	}
 	profileService := profiles.New(db.DB, vault)
 	defer profileService.Close()

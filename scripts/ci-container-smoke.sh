@@ -39,14 +39,6 @@ if docker container inspect "$container" >/dev/null 2>&1; then
   exit 1
 fi
 
-printf '%s\n' 'synthetic-ci-password-2026' | docker run --rm -i \
-  --network none \
-  --mount "type=volume,source=$data_volume,target=/data" \
-  --mount "type=volume,source=$keys_volume,target=/keys" \
-  -e FOLDERHUG_DATA_DIR=/data \
-  -e FOLDERHUG_KEYS_DIR=/keys \
-  "$image" setup --password-stdin >/dev/null
-
 start_app() {
   local use_mount=$1
   local args=(
@@ -54,7 +46,7 @@ start_app() {
     --read-only --cap-drop ALL --security-opt no-new-privileges
     --tmpfs /tmp:rw,size=64m,mode=1777
     --mount "type=volume,source=$data_volume,target=/data"
-    --mount "type=volume,source=$keys_volume,target=/keys,readonly"
+    --mount "type=volume,source=$keys_volume,target=/keys"
     --mount "type=volume,source=$downloads_volume,target=/downloads"
     --mount "type=volume,source=$cache_volume,target=/cache"
     -e FOLDERHUG_ADDR=0.0.0.0:8080
@@ -113,6 +105,14 @@ login() {
 
 start_app yes
 docker exec "$container" http-wrapper healthcheck
+curl --silent --show-error --fail \
+  --connect-to "localhost:8080:127.0.0.1:$port" \
+  'http://localhost:8080/api/v1/auth/setup' | jq -e '.setup_required == true' >/dev/null
+curl --silent --show-error --fail \
+  --connect-to "localhost:8080:127.0.0.1:$port" \
+  -H 'Origin: http://localhost:8080' -H 'Content-Type: application/json' \
+  --data '{"password":"synthetic-ci-password-2026","remember_me":true}' \
+  'http://localhost:8080/api/v1/auth/setup' | jq -e '.authenticated == true' >/dev/null
 login
 api -b "$state_dir/cookies" | jq -e '.destinations[] | select(.id == "synthetic" and .available == true)' >/dev/null
 docker exec "$container" sh -c 'printf mounted > /mnt/synthetic/ci-marker && test -w /mnt/synthetic'
@@ -121,6 +121,9 @@ docker exec "$container" sh -c 'printf mounted > /mnt/synthetic/ci-marker && tes
 docker rm -f "$container" >/dev/null
 container_created=false
 start_app no
+curl --silent --show-error --fail \
+  --connect-to "localhost:8080:127.0.0.1:$port" \
+  'http://localhost:8080/api/v1/auth/setup' | jq -e '.setup_required == false' >/dev/null
 login
 api -b "$state_dir/cookies" | jq -e '.destinations[] | select(.id == "synthetic" and .available == false)' >/dev/null
-echo 'Core startup, restart, and synthetic mount smoke passed.'
+echo 'Browser setup, restart, and synthetic mount smoke passed.'

@@ -117,6 +117,39 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	}
 }
 
+func TestSetupMigrationClosesExistingInstallations(t *testing.T) {
+	for _, seed := range []string{"", "INSERT INTO settings(key,value) VALUES('credential_key_check','synthetic')", "INSERT INTO owner_auth(id,password_hash) VALUES(1,'synthetic')", "INSERT INTO profiles(id,name,settings) VALUES('p','Synthetic','{}')"} {
+		t.Run(seed, func(t *testing.T) {
+			dir := t.TempDir()
+			s, err := Open(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seed != "" {
+				if _, err := s.DB.Exec(seed); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := s.DB.Exec("DELETE FROM schema_migrations WHERE name='migrations/013_setup_state.sql'"); err != nil {
+				t.Fatal(err)
+			}
+			s.Close()
+			s, err = Open(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			var complete int
+			if err := s.DB.QueryRow("SELECT COUNT(*) FROM settings WHERE key='owner_setup_complete'").Scan(&complete); err != nil {
+				t.Fatal(err)
+			}
+			if (complete != 0) != (seed != "") {
+				t.Fatalf("setup state after populated upgrade: %d", complete)
+			}
+		})
+	}
+}
+
 func TestUpgradeFromInitialScanSchemaPreservesPaths(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir)
