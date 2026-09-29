@@ -146,7 +146,7 @@ A restored database also restores its authentication records. Use owner recovery
 
 ## Update and owner recovery
 
-Before an update, stop and back up the installation and record its current image digest or source revision. For the default installation, download the reviewed replacement Compose file if it changed, run `docker compose pull`, then run `docker compose up -d app` with the same project name. Set `FOLDERHUG_IMAGE` to a specific tag or digest when you need to pin the app image; use that same value for setup and app commands. For a source build, select the intended source revision, rebuild with both Compose files, and start against the intended volumes. Database migrations run on startup. There are no down migrations; a rollback may require the old binary and its matching pre-update backup in a separate installation.
+Before an update, stop and back up the installation and record its current image digest or source revision. For the default installation, review any changes to the supplied Compose file and keep your own folder mounts and settings when applying them. Run `docker compose pull`, then `docker compose up -d` with the same project name. Set `FOLDERHUG_IMAGE` to a specific tag or digest when you need to pin the app image; use that same value for setup and app commands. For a source build, select the intended source revision, rebuild with both Compose files, and start against the intended volumes. Database migrations run on startup. There are no down migrations; a rollback may require the old binary and its matching pre-update backup in a separate installation.
 
 To change a forgotten owner password, stop the app and run the recovery command using the existing database and key:
 

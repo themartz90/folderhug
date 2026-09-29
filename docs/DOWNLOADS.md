@@ -20,32 +20,38 @@ The queue admits at most 1,000 unfinished jobs, including paused and interrupted
 
 The built-in destination ID is `server`, backed by `FOLDERHUG_DOWNLOADS_DIR`. The owner can also configure mounted folders with `FOLDERHUG_MOUNTED_ROOTS`. A job then supplies a configured destination ID and an existing folder path relative to that mount. API tokens remain limited to `server`. The app does not accept an arbitrary host path in a download request. Download filenames are normalized for Windows and Linux, and mounted files keep both names when a filename already exists.
 
-Configure mounts in Compose by adding each writable host folder to the app service's `volumes`, then list the matching container paths in `FOLDERHUG_MOUNTED_ROOTS`. The included [mount override](../examples/compose.mounts.yaml) is a complete example for a host directory at `/srv/media`:
+Configure a host folder with a normal Compose bind mount, such as `- /mnt/Plex:/mnt/Plex:rw`, then list its container path in `FOLDERHUG_MOUNTED_ROOTS`. The [README](../README.md#save-to-a-host-folder) shows both edits in the main Compose file. The mount makes the folder accessible to the container; the setting gives it a name in the folder picker.
+
+The first mount path is on the host, and the second is inside the container. They can be identical. If you prefer `/mnt/Plex:/media:rw`, use `/media` as the JSON `path`. The `label` is shown in the app. Keep each `id` unique and stable, since saved jobs and favorites refer to it.
+
+For multiple folders, add a mount for each one and list them in the same JSON array:
+
+```yaml
+FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"},{"id":"music","label":"Music","path":"/mnt/Music"}]'
+```
+
+Each host folder needs write permission for the container's UID/GID 10001. The `:rw` option permits writes through the mount, but does not change host filesystem permissions. For an existing library, grant access to the intended folder without changing ownership or permissions across the whole tree.
+
+### Optional override and missing-path checks
+
+You can keep mounts in a separate file if you prefer. The included [mount override](../examples/compose.mounts.yaml) uses Docker's long syntax with `create_host_path: false`, so a missing host directory stops startup. Short syntax creates the host directory if it does not exist. See [Docker's bind-mount syntax](https://docs.docker.com/reference/compose-file/services/#volumes).
 
 ```yaml
 services:
   app:
     environment:
-      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
+      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"}]'
     volumes:
       - type: bind
-        source: /srv/media
-        target: /mnt/media
+        source: /mnt/Plex
+        target: /mnt/Plex
         bind:
           create_host_path: false
 ```
 
-Create `/srv/media` before starting Compose and make it writable by the container's UID/GID 10001. For a new, empty folder:
+Replace `/mnt/Plex` with your existing folder, keeping `target` and the JSON `path` equal. Save the example as `compose.mounts.yaml` beside `compose.yaml`, then run `docker compose -f compose.yaml -f compose.mounts.yaml up -d`. Include both files in later startup and update commands. For a source build, include `compose.build.yaml` before the mount override. Keep any `-p` project name already in use.
 
-```sh
-sudo mkdir /srv/media &&
-sudo chown 10001:10001 /srv/media &&
-sudo chmod 0750 /srv/media
-```
-
-These commands stop if the folder already exists. For an existing library, check its permissions and grant the container access to the intended folder without changing ownership or permissions across the whole tree. Change `source` in the override to your host folder; keep `target` and the JSON `path` equal. The JSON `label` is the name shown in the app.
-
-`create_host_path: false` makes a missing host path an error instead of creating a new folder. Keep the existing app volumes when adding the override. Save the example as `compose.mounts.yaml` beside `compose.yaml`. Check the combined configuration with `docker compose -f compose.yaml -f compose.mounts.yaml config`, then start with `docker compose -f compose.yaml -f compose.mounts.yaml up -d`. Keep the mount override in later startup and update commands too. For a source build, include `compose.build.yaml` before the mount override. Keep any `-p` project name already in use.
+### Storage behavior
 
 On Windows native development, set the same variable with an absolute Windows path to an existing local folder. The picker shows folders inside configured mounts, remembers the last selected folder, and stores favorites with the owner's preferences. If a mount is missing, it stays unavailable instead of switching a job to another destination. The owner can still browse and download completed files after the mount returns. The app does not delete completed files from mounted folders through Server queue, since another program may have changed or replaced them. Remove those files using the host's normal file tools.
 

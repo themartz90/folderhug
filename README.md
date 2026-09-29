@@ -29,22 +29,23 @@ To build from source, clone the [repository](https://github.com/themartz90/folde
 
 ## Save to a host folder
 
-The default server destination is the `/downloads` volume. To let the owner choose a host folder, create a `compose.mounts.yaml` override alongside `compose.yaml`:
+You can save downloads into an existing folder on your server. For example, to use `/mnt/Plex`, make two edits under `services.app` in `compose.yaml`.
+
+Add the folder to the existing `volumes` list, keeping the other entries:
 
 ```yaml
-services:
-  app:
-    environment:
-      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"media","label":"Media","path":"/mnt/media"}]'
-    volumes:
-      - type: bind
-        source: /srv/media
-        target: /mnt/media
-        bind:
-          create_host_path: false
+- /mnt/Plex:/mnt/Plex:rw
 ```
 
-Create `/srv/media` first and give the container's UID/GID 10001 write access. Check existing media permissions before changing them. Then start with `docker compose -f compose.yaml -f compose.mounts.yaml up -d` and keep both files in later update commands. Mounted jobs stage a copy in `/downloads`, so that volume also needs space for the file. See [downloads and mounted folders](docs/DOWNLOADS.md) for limits and resume behavior.
+Then replace the existing `FOLDERHUG_MOUNTED_ROOTS` line under `environment`:
+
+```yaml
+FOLDERHUG_MOUNTED_ROOTS: '[{"id":"plex","label":"Plex","path":"/mnt/Plex"}]'
+```
+
+The mount gives the container access to the folder. The setting adds **Plex** to Folderhug's **Save to server** picker. In the mount line, the first path is on your server and the second is inside the container; they can be the same. The JSON `path` must match the second path. Use your own folder instead of `/mnt/Plex`.
+
+Run `docker compose up -d` to apply the change, then choose **Plex** when saving a file. The folder must be writable by the container's UID/GID 10001; `:rw` does not change host permissions. Keep the `/downloads` volume too, since downloads use it for temporary storage. See [downloads and mounted folders](docs/DOWNLOADS.md) for multiple folders, missing-path checks, and an optional override file.
 
 ## Local development
 
