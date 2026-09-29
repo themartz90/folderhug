@@ -4,7 +4,9 @@ set -euo pipefail
 image=${1:?usage: ci-container-smoke.sh IMAGE}
 state_dir=$(mktemp -d)
 mount_dir="$state_dir/mount"
-mkdir "$mount_dir"
+parent_dir="$state_dir/parent"
+readonly_dir="$state_dir/readonly"
+mkdir -p "$mount_dir/allowed" "$parent_dir/synthetic" "$readonly_dir"
 suffix="${state_dir##*/}-$$"
 data_volume="folderhug-ci-data-${suffix}"
 keys_volume="folderhug-ci-keys-${suffix}"
@@ -25,7 +27,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-chmod 0777 "$mount_dir"
+chmod 0777 "$mount_dir" "$mount_dir/allowed" "$parent_dir" "$parent_dir/synthetic" "$readonly_dir"
 for volume in "$data_volume" "$keys_volume" "$downloads_volume" "$cache_volume"; do
   if docker volume inspect "$volume" >/dev/null 2>&1; then
     echo "Refusing existing CI volume: $volume" >&2
@@ -49,16 +51,13 @@ start_app() {
     --mount "type=volume,source=$keys_volume,target=/keys"
     --mount "type=volume,source=$downloads_volume,target=/downloads"
     --mount "type=volume,source=$cache_volume,target=/cache"
-    -e FOLDERHUG_ADDR=0.0.0.0:8080
-    -e FOLDERHUG_PUBLIC_URL=http://localhost:8080
-    -e FOLDERHUG_DATA_DIR=/data
-    -e FOLDERHUG_KEYS_DIR=/keys
-    -e FOLDERHUG_DOWNLOADS_DIR=/downloads
-    -e FOLDERHUG_CACHE_DIR=/cache
-    -e 'FOLDERHUG_MOUNTED_ROOTS=[{"id":"synthetic","label":"Synthetic","path":"/mnt/synthetic"}]'
+    --mount "type=bind,source=$parent_dir,target=/mnt"
+    --mount "type=bind,source=$readonly_dir,target=/mnt/readonly,readonly"
+    --mount "type=volume,source=$keys_volume,target=/mnt/private"
   )
   if [[ $use_mount == yes ]]; then
     args+=(--mount "type=bind,source=$mount_dir,target=/mnt/synthetic")
+    args+=(--mount "type=volume,source=$keys_volume,target=/mnt/synthetic/blocked")
   fi
   docker run -d "${args[@]}" "$image" >/dev/null
   container_created=true
@@ -84,46 +83,61 @@ start_app() {
   local published
   published=$(docker port "$container" 8080/tcp)
   port=${published##*:}
+  base="http://127.0.0.1:$port"
 }
 
 api() {
-  curl --silent --show-error --fail \
-    --connect-to "localhost:8080:127.0.0.1:$port" \
-    "$@" "http://localhost:8080/api/v1/destinations"
+  curl --silent --show-error --fail "$@" "$base/api/v1/destinations"
 }
 
 login() {
   curl --silent --show-error --fail \
-    --connect-to "localhost:8080:127.0.0.1:$port" \
     -c "$state_dir/cookies" \
-    -H 'Origin: http://localhost:8080' \
-    -H 'Content-Type: application/json' \
+    -H "Origin: $base" -H 'Content-Type: application/json' \
     --data '{"password":"synthetic-ci-password-2026"}' \
-    'http://localhost:8080/api/v1/auth/login' >/dev/null
+    "$base/api/v1/auth/login" >/dev/null
   awk '$6 == "folderhug_session" { found = 1 } END { exit !found }' "$state_dir/cookies"
 }
 
 start_app yes
 docker exec "$container" http-wrapper healthcheck
 curl --silent --show-error --fail \
-  --connect-to "localhost:8080:127.0.0.1:$port" \
-  'http://localhost:8080/api/v1/auth/setup' | jq -e '.setup_required == true' >/dev/null
+  "$base/api/v1/auth/setup" | jq -e '.setup_required == true' >/dev/null
 curl --silent --show-error --fail \
-  --connect-to "localhost:8080:127.0.0.1:$port" \
-  -H 'Origin: http://localhost:8080' -H 'Content-Type: application/json' \
+  -H "Origin: $base" -H 'Content-Type: application/json' \
   --data '{"password":"synthetic-ci-password-2026","remember_me":true}' \
-  'http://localhost:8080/api/v1/auth/setup' | jq -e '.authenticated == true' >/dev/null
+  "$base/api/v1/auth/setup" | jq -e '.authenticated == true' >/dev/null
 login
-api -b "$state_dir/cookies" | jq -e '.destinations[] | select(.id == "synthetic" and .available == true)' >/dev/null
+destinations=$(api -b "$state_dir/cookies")
+mount_id=$(jq -er '.destinations[] | select(.label == "synthetic" and .available == true) | .id' <<<"$destinations")
+jq -e '.destinations | length == 2' <<<"$destinations" >/dev/null
+curl --silent --show-error --fail -b "$state_dir/cookies" \
+  "$base/api/v1/destinations/$mount_id/folders" | \
+  jq -e '.folders | length == 1 and .[0].name == "allowed"' >/dev/null
+status=$(curl --silent --show-error -o /dev/null -w '%{http_code}' -b "$state_dir/cookies" \
+  "$base/api/v1/destinations/$mount_id/folders?path=blocked")
+[[ $status == 400 ]]
+
 docker exec "$container" sh -c 'printf mounted > /mnt/synthetic/ci-marker && test -w /mnt/synthetic'
 [[ $(cat "$mount_dir/ci-marker") == mounted ]]
 
 docker rm -f "$container" >/dev/null
 container_created=false
+start_app yes
+login
+api -b "$state_dir/cookies" | jq -e --arg id "$mount_id" \
+  '.destinations[] | select(.id == $id and .available == true)' >/dev/null
+
+docker rm -f "$container" >/dev/null
+container_created=false
 start_app no
 curl --silent --show-error --fail \
-  --connect-to "localhost:8080:127.0.0.1:$port" \
-  'http://localhost:8080/api/v1/auth/setup' | jq -e '.setup_required == false' >/dev/null
+  "$base/api/v1/auth/setup" | jq -e '.setup_required == false' >/dev/null
 login
-api -b "$state_dir/cookies" | jq -e '.destinations[] | select(.id == "synthetic" and .available == false)' >/dev/null
-echo 'Browser setup, restart, and synthetic mount smoke passed.'
+api -b "$state_dir/cookies" | jq -e '.destinations | length == 1 and .[0].id == "server"' >/dev/null
+status=$(curl --silent --show-error -o /dev/null -w '%{http_code}' -b "$state_dir/cookies" \
+  "$base/api/v1/destinations/$mount_id/folders")
+[[ $status == 404 ]]
+[[ -z $(ls -A "$parent_dir/synthetic") ]]
+
+echo 'Default image setup, stable mount IDs, protected folders, and missing mount checks passed.'

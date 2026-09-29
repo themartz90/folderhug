@@ -37,11 +37,20 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	u, err := url.Parse(Value("PUBLIC_URL", "http://localhost:8080"))
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "http" && u.Scheme != "https") {
-		return Config{}, fmt.Errorf("FOLDERHUG_PUBLIC_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
+	base, address := ".local", "127.0.0.1:8080"
+	// The image supplies defaults without shadowing existing configuration aliases.
+	if os.Getenv("FOLDERHUG_CONTAINER") == "1" {
+		base, address = "/", "0.0.0.0:8080"
 	}
-	u.Path = ""
+	var u *url.URL
+	if raw := Env("PUBLIC_URL"); raw != "" {
+		var err error
+		u, err = url.Parse(raw)
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "http" && u.Scheme != "https") {
+			return Config{}, fmt.Errorf("FOLDERHUG_PUBLIC_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
+		}
+		u.Path = ""
+	}
 	policy, err := loadAllowances(Env("UPSTREAM_ALLOW_FILE"))
 	if err != nil {
 		return Config{}, err
@@ -82,13 +91,13 @@ func Load() (Config, error) {
 	}
 	return Config{
 		DownloadBudgetBytes: limits["DOWNLOAD_BUDGET_BYTES"], DownloadReserveBytes: limits["DOWNLOAD_RESERVE_BYTES"], DownloadUnknownBytes: limits["DOWNLOAD_UNKNOWN_BYTES"], ThumbnailCacheBytes: limits["THUMBNAIL_CACHE_BYTES"],
-		MediaSocket: Env("MEDIA_SOCKET"), WorkerKeyFile: Value("WORKER_KEY", filepath.Join(".local", "worker-key", "worker.key")),
-		Address: Value("ADDR", "127.0.0.1:8080"), PublicURL: u,
-		DataDir:        Value("DATA_DIR", filepath.Join(".local", "data")),
-		KeysDir:        Value("KEYS_DIR", filepath.Join(".local", "keys")),
-		DownloadsDir:   Value("DOWNLOADS_DIR", filepath.Join(".local", "downloads")),
+		MediaSocket: Env("MEDIA_SOCKET"), WorkerKeyFile: Value("WORKER_KEY", filepath.Join(base, "worker-key", "worker.key")),
+		Address: Value("ADDR", address), PublicURL: u,
+		DataDir:        Value("DATA_DIR", filepath.Join(base, "data")),
+		KeysDir:        Value("KEYS_DIR", filepath.Join(base, "keys")),
+		DownloadsDir:   Value("DOWNLOADS_DIR", filepath.Join(base, "downloads")),
 		MountedRoots:   mounted,
-		CacheDir:       Value("CACHE_DIR", filepath.Join(".local", "cache")),
+		CacheDir:       Value("CACHE_DIR", filepath.Join(base, "cache")),
 		UpstreamPolicy: policy,
 		StreamMaxBytes: streamBytes, StreamTimeout: streamTimeout,
 	}, nil

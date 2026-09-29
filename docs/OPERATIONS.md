@@ -8,9 +8,9 @@ The core deployment uses one app container and SQLite. The default `compose.yaml
 docker compose up -d
 ```
 
-Open `http://localhost:8080` on the host. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Finish this step before exposing the address to anyone else, since the first visitor can claim the owner account.
+Open `http://localhost:8080` on the host or `http://SERVER-IP:8080` from your LAN. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Anyone who can reach an unclaimed installation can create the owner account, so finish this step on a trusted network before sharing the address or exposing it outside the LAN.
 
-The port binds to loopback by default. To check the container's status, run `docker compose ps`. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
+The default Compose file publishes port 8080 on the host. To check the container's status, run `docker compose ps`. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
 
 The CLI setup command remains available for an operator who needs to initialize the owner before opening the browser: `docker compose --profile tools run --rm setup`. It prompts in the terminal and refuses to replace an existing owner. It is optional for an ordinary first start.
 
@@ -29,12 +29,13 @@ docker compose -f compose.yaml -f compose.build.yaml up -d
 
 Both modes use the same volumes when the Compose project name stays the same. Do not run two app containers against those volumes at once. Record the source revision or image digest before updating.
 
-The remaining examples use the default image installation without overlays. If you use a mounted-folder override, include `-f compose.yaml -f compose.mounts.yaml` in every later Compose command so an update keeps the mount. For a source build, use `-f compose.yaml -f compose.build.yaml`, followed by any mount override. Keep any `-p` project name you selected at first start. To choose another local port, set both values before running Compose:
+The remaining examples use the default image installation without overlays. If you use a mounted-folder override, include `-f compose.yaml -f compose.mounts.yaml` in every later Compose command so an update keeps the mount. For a source build, use `-f compose.yaml -f compose.build.yaml`, followed by any mount override. Keep any `-p` project name you selected at first start. To choose another host port:
 
 ```sh
 export FOLDERHUG_PORT=18080
-export FOLDERHUG_PUBLIC_URL=http://localhost:18080
 ```
+
+With no explicit public URL, Folderhug accepts `localhost` and literal IP addresses at the selected port. For a custom hostname or HTTPS reverse proxy, set `FOLDERHUG_PUBLIC_URL` to the exact external origin.
 
 `/health/live` reports that the HTTP server is responding. `/health/ready` also checks the database. Neither checks upstream credentials or source availability. `docker compose logs --tail=100 app` shows recent app logs; inspect logs before sharing them.
 
@@ -48,12 +49,13 @@ The session cookie is `folderhug_session`. The database filename and stored encr
 
 | Variable | Native default | Purpose |
 | --- | --- | --- |
-| `FOLDERHUG_ADDR` | `127.0.0.1:8080` | Listening address; Compose sets `0.0.0.0:8080` inside its container |
-| `FOLDERHUG_PUBLIC_URL` | `http://localhost:8080` | Exact public origin for Host, Origin, and cookie checks |
+| `FOLDERHUG_ADDR` | `127.0.0.1:8080` | Listening address; the container image defaults to `0.0.0.0:8080` |
+| `FOLDERHUG_PUBLIC_URL` | automatic for localhost and literal IP addresses | Set the exact public origin for a custom hostname or HTTPS reverse proxy |
 | `FOLDERHUG_DATA_DIR` | `.local/data` | SQLite database and related files |
 | `FOLDERHUG_KEYS_DIR` | `.local/keys` | Credential encryption key |
 | `FOLDERHUG_DOWNLOADS_DIR` | `.local/downloads` | Completed and partial server downloads |
 | `FOLDERHUG_CACHE_DIR` | `.local/cache` | Disposable thumbnail cache |
+| `FOLDERHUG_MOUNTED_ROOTS` | unset | Advanced explicit destination IDs or native paths outside Docker mount discovery |
 | `FOLDERHUG_STREAM_MAX_BYTES` | `1099511627776` | Maximum bytes per proxied source stream |
 | `FOLDERHUG_STREAM_TIMEOUT` | `24h` | Stream deadline, from `1s` to `168h` |
 | `FOLDERHUG_DOWNLOAD_BUDGET_BYTES` | `107374182400` | Download storage budget, 100 GiB |
@@ -64,11 +66,11 @@ The session cookie is `folderhug_session`. The database filename and stored encr
 | `FOLDERHUG_MEDIA_SOCKET` | unset | Optional worker broker socket |
 | `FOLDERHUG_WORKER_KEY` | `.local/worker-key/worker.key` | Separate app-to-worker authentication key |
 
-Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. The app needs write access to `/keys` on a fresh installation so it can create `credentials.key`. It runs as UID/GID 10001; keep that ownership when restoring files. A writable host folder used as a mounted download destination also needs access for UID/GID 10001; check its existing permissions before changing ownership or mode.
+Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. Directory bind mounts directly under `/mnt` are discovered as server-save destinations at startup without an environment setting. Browser downloads need no host mount. The app needs write access to `/keys` on a fresh installation so it can create `credentials.key`. It runs as UID/GID 10001; keep that ownership when restoring files. A writable host folder used as a mounted download destination also needs access for UID/GID 10001; check its existing permissions before changing ownership or mode.
 
-The public URL is an origin, with no path, query, fragment, or credentials. A reverse proxy must preserve the public Host and Origin headers and forward to the loopback app port. Configure HTTPS at that proxy, disable response buffering for streaming downloads, and allow long responses and server-sent events. Forwarded headers do not replace the app's configured origin. Deployment under a URL subpath is not supported.
+The public URL is an origin, with no path, query, fragment, or credentials. Automatic origin checks accept localhost and literal IP addresses; forwarded headers are not trusted for this decision. For an external custom hostname or access outside a trusted LAN, configure an HTTPS reverse proxy and set the exact `FOLDERHUG_PUBLIC_URL`. The proxy must preserve the public Host and Origin headers, disable response buffering for streaming downloads, and allow long responses and server-sent events. Deployment under a URL subpath is not supported.
 
-[examples/nginx.conf](../examples/nginx.conf) is a complete example configuration for nginx on the same host as the loopback Compose port. Replace `files.example.test` and the certificate paths, provide a valid certificate and key, and set `FOLDERHUG_PUBLIC_URL=https://files.example.test` before starting the app. If nginx already serves other applications, adapt the server block into that installation rather than replacing its entire configuration. A proxy in another container needs a different upstream address: its own `127.0.0.1` is not the host's app port.
+[examples/nginx.conf](../examples/nginx.conf) is a configuration for nginx on the same host. It sends requests to `127.0.0.1:8080`, so set `FOLDERHUG_PORT=127.0.0.1:8080` before starting Compose if you use it. Replace `files.example.test` and the certificate paths, provide a valid certificate and key, and set `FOLDERHUG_PUBLIC_URL=https://files.example.test`. If nginx already serves other applications, adapt the server block into that installation rather than replacing its entire configuration. A proxy in another container needs a different upstream address: its own `127.0.0.1` is not the host's app port.
 
 The example keeps Host unchanged and lets nginx forward Origin, authorization, cookies, and range headers. It uses HTTP/1.1, disables response buffering and caching, and allows a 24-hour gap between upstream reads for long downloads and event streams. These directives follow the [nginx proxy module documentation](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
 

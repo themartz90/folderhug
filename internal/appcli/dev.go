@@ -19,13 +19,13 @@ import (
 )
 
 func configureDev(cfg *config.Config) error {
-	host, _, err := net.SplitHostPort(cfg.Address)
+	host, port, err := net.SplitHostPort(cfg.Address)
 	ip := net.ParseIP(host)
 	if err != nil || ip == nil || !ip.IsLoopback() {
 		return fmt.Errorf("dev requires a literal loopback listen address, such as 127.0.0.1:8080")
 	}
 	if cfg.PublicURL == nil {
-		return fmt.Errorf("dev requires a loopback public URL")
+		cfg.PublicURL = &url.URL{Scheme: "http", Host: net.JoinHostPort("localhost", port)}
 	}
 	host = cfg.PublicURL.Hostname()
 	ip = net.ParseIP(host)

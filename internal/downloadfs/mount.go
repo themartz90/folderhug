@@ -13,7 +13,11 @@ import (
 	"unicode/utf8"
 )
 
-type Mount struct{ root *os.Root }
+type Mount struct {
+	root    *os.Root
+	guarded bool
+	mountID int
+}
 type FolderEntry struct{ Name, Path string }
 
 func OpenMount(path string) (*Mount, error) {
@@ -24,7 +28,32 @@ func OpenMount(path string) (*Mount, error) {
 	return &Mount{root: store.root}, nil
 }
 
+// OpenMountChecked refuses a mount that disappeared or changed before its root
+// descriptor was opened. Protected paths prevent app storage aliases from being
+// exposed as download destinations.
+func OpenMountChecked(path string, protected []string) (*Mount, error) {
+	mount, err := OpenMount(path)
+	if err != nil {
+		return nil, err
+	}
+	id, err := verifyOpenedMount(path, mount.root, protected)
+	if err != nil {
+		mount.Close()
+		return nil, err
+	}
+	mount.guarded, mount.mountID = true, id
+	return mount, nil
+}
+
 func (m *Mount) Close() error { return m.root.Close() }
+
+func (m *Mount) checkFile(file *os.File) error {
+	if m.guarded {
+		return verifyMountFile(file, m.mountID)
+	}
+	return nil
+}
+
 func ValidFolder(p string) bool {
 	if p == "" {
 		return true
@@ -45,7 +74,15 @@ func (m *Mount) directory(p string) (*os.Root, error) {
 		return nil, ErrInvalid
 	}
 	if p == "" {
-		return m.root.OpenRoot(".")
+		root, err := m.root.OpenRoot(".")
+		if err == nil && m.guarded {
+			err = verifyMountChild(root, m.mountID)
+			if err != nil {
+				root.Close()
+				return nil, err
+			}
+		}
+		return root, err
 	}
 	current, err := m.root.OpenRoot(".")
 	if err != nil {
@@ -56,6 +93,12 @@ func (m *Mount) directory(p string) (*os.Root, error) {
 		current.Close()
 		if e != nil {
 			return nil, e
+		}
+		if m.guarded {
+			if e := verifyMountChild(next, m.mountID); e != nil {
+				next.Close()
+				return nil, e
+			}
 		}
 		current = next
 	}
@@ -92,6 +135,17 @@ func (m *Mount) Folders(p string) ([]FolderEntry, error) {
 			}
 			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 				continue
+			}
+			if m.guarded {
+				child, e := openDirectory(root, name)
+				if e != nil {
+					continue
+				}
+				e = verifyMountChild(child, m.mountID)
+				child.Close()
+				if e != nil {
+					continue
+				}
 			}
 			folderPath := name
 			if p != "" {
@@ -168,6 +222,10 @@ func (m *Mount) Prepare(ctx context.Context, folder, id, desired string, src *os
 		if e != nil {
 			return nil, e
 		}
+		if e := m.checkFile(probe); e != nil {
+			probe.Close()
+			return nil, e
+		}
 		actual, statErr := probe.Stat()
 		links, linkErr := linkCount(probe)
 		probe.Close()
@@ -199,6 +257,9 @@ func (m *Mount) Prepare(ctx context.Context, folder, id, desired string, src *os
 		return nil, err
 	}
 	defer file.Close()
+	if err := m.checkFile(file); err != nil {
+		return nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -287,7 +348,15 @@ func (m *Mount) OpenCompleted(folder, name string) (*os.File, error) {
 		return nil, err
 	}
 	defer root.Close()
-	return openRegular(root, name, os.O_RDONLY, false)
+	file, err := openRegular(root, name, os.O_RDONLY, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.checkFile(file); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
 }
 
 func (m *Mount) OpenPublished(folder, name, id string) (*os.File, error) {
@@ -308,6 +377,10 @@ func (m *Mount) OpenPublished(folder, name, id string) (*os.File, error) {
 	}
 	f, err := root.OpenFile(name, os.O_RDONLY|safeOpenFlags, 0)
 	if err != nil {
+		return nil, err
+	}
+	if err := m.checkFile(f); err != nil {
+		f.Close()
 		return nil, err
 	}
 	actual, err := f.Stat()

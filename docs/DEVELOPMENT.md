@@ -20,7 +20,7 @@ cd ..
 go run ./cmd/folderhug
 ```
 
-Open `http://localhost:8080` and create the owner password in the browser. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. The hostname matters: the app rejects a Host header that differs from `FOLDERHUG_PUBLIC_URL`. With the defaults, opening `http://127.0.0.1:8080` instead is not equivalent.
+Open `http://localhost:8080` and create the owner password in the browser. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. By default the app accepts localhost and literal IP addresses at its listening port; if you set `FOLDERHUG_PUBLIC_URL`, the browser must use that exact origin.
 
 The app creates `.local/keys/credentials.key` on a fresh installation. The CLI `setup` command is optional when you need to initialize the owner before opening the browser. The first visitor to a fresh installation can claim the owner account, so complete setup before exposing the address. Do not run two app instances against the same state directory. Stop the app with Ctrl+C before password recovery or copying its state.
 

@@ -88,9 +88,11 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-		if s.Config.PublicURL != nil && r.URL.Path != "/health/live" && r.URL.Path != "/health/ready" && r.Host != s.Config.PublicURL.Host {
-			problem(w, r, 421, "unsafe_origin", "The request host does not match this server's configured address.")
-			return
+		if r.URL.Path != "/health/live" && r.URL.Path != "/health/ready" {
+			if _, allowed := s.requestOrigin(r); !allowed {
+				problem(w, r, 421, "unsafe_origin", "Open Folderhug using the server IP, or configure its public URL for this hostname.")
+				return
+			}
 		}
 		mux.ServeHTTP(w, r)
 	})

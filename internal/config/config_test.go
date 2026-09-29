@@ -103,7 +103,7 @@ func TestFolderhugSettingsTakePrecedenceOverLegacySettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PublicURL.String() != "http://localhost:8080" || cfg.DataDir != filepath.Join(".local", "data") || cfg.DownloadBudgetBytes != 107374182400 || cfg.MediaSocket != "" {
+	if cfg.PublicURL != nil || cfg.DataDir != filepath.Join(".local", "data") || cfg.DownloadBudgetBytes != 107374182400 || cfg.MediaSocket != "" {
 		t.Fatalf("empty Folderhug settings fell back to legacy values: %+v", cfg)
 	}
 	for _, key := range []string{"FOLDERHUG_PUBLIC_URL", "FOLDERHUG_DATA_DIR", "FOLDERHUG_DOWNLOAD_BUDGET_BYTES", "FOLDERHUG_MEDIA_SOCKET"} {
@@ -124,5 +124,23 @@ func TestFolderhugSettingValidation(t *testing.T) {
 	t.Setenv("FOLDERHUG_PUBLIC_URL", "https://folderhug.example.test/path")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FOLDERHUG_PUBLIC_URL") {
 		t.Fatalf("expected canonical setting in error, got %v", err)
+	}
+}
+
+func TestImageDefaultsPreserveLegacyOverrides(t *testing.T) {
+	t.Setenv("FOLDERHUG_CONTAINER", "1")
+	t.Setenv("FOLDERHUG_PUBLIC_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Address != "0.0.0.0:8080" || cfg.DataDir != filepath.Join("/", "data") || cfg.PublicURL != nil {
+		t.Fatal("incorrect container defaults", cfg)
+	}
+	t.Setenv("HTTPWRAPPER_DATA_DIR", "existing-data")
+	t.Setenv("HTTPWRAPPER_ADDR", "127.0.0.1:9090")
+	cfg, err = Load()
+	if err != nil || cfg.DataDir != "existing-data" || cfg.Address != "127.0.0.1:9090" {
+		t.Fatal("image defaults hid legacy settings", cfg, err)
 	}
 }

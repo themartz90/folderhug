@@ -595,7 +595,7 @@
     </div>
     <div>
       <button class="button secondary" onclick={() => ontransfer(selectedEntries, 'browser')}
-        >Download</button
+        >Download to this device</button
       ><button class="button primary" onclick={() => ontransfer(selectedEntries, 'server')}
         >Save to server</button
       >

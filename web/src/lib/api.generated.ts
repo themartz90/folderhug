@@ -9,7 +9,7 @@ export interface paths {
         };
         get: operations["getSetupStatus"];
         put?: never;
-        /** @description Claim a fresh installation once. Requires the configured Origin and a JSON body. Passwords need at least six Unicode characters and at most 1024 UTF-8 bytes. */
+        /** @description Claim a fresh installation once. Requires a matching Origin and a JSON body. Passwords need at least six Unicode characters and at most 1024 UTF-8 bytes. */
         post: operations["setupOwner"];
         delete?: never;
         options?: never;

@@ -133,7 +133,11 @@ func run() error {
 		reserve = -1
 	}
 	app.Downloads = downloads.New(db.DB, profileService, owner, app.Catalog, transport, app.Events, downloadFiles, downloads.Limits{StorageBudgetBytes: cfg.DownloadBudgetBytes, FreeReserveBytes: reserve, UnknownSizeMaxBytes: cfg.DownloadUnknownBytes, RequestTimeout: cfg.StreamTimeout})
-	app.Downloads.ConfigureMounts(cfg.MountedRoots)
+	mounts, err := prepareDownloadMounts(cfg)
+	if err != nil {
+		return err
+	}
+	app.Downloads.ConfigureMounts(mounts)
 	if err = app.Downloads.Start(ctx); err != nil {
 		return err
 	}

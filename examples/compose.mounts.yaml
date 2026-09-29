@@ -1,7 +1,5 @@
 services:
   app:
-    environment:
-      FOLDERHUG_MOUNTED_ROOTS: '[{"id":"drive","label":"Drive","path":"/mnt/drive"}]'
     volumes:
       - type: bind
         source: /mnt/drive

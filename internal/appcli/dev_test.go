@@ -40,6 +40,16 @@ func TestDevConfigRestrictsNetworkAndSeparatesData(t *testing.T) {
 	}
 }
 
+func TestDevConfigUsesLocalAddressWithoutPublicURL(t *testing.T) {
+	cfg := config.Config{Address: "127.0.0.1:8081"}
+	if err := configureDev(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PublicURL.String() != "http://localhost:8081" {
+		t.Fatal(cfg.PublicURL)
+	}
+}
+
 func TestDevSessionPreservesKeyAndFailsWhenLost(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

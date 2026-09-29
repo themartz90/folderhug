@@ -61,6 +61,7 @@ test('mounted folder picker remembers the selected folder and favorites', async 
   await page.getByRole('button', { name: 'Save to server', exact: true }).click();
   let dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('To save into a host folder', { exact: false })).toHaveCount(0);
   await dialog.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('media');
   await dialog.getByRole('button', { name: 'Movies/', exact: true }).click();
   await expect(dialog.getByText('Selected folder: /Movies', { exact: true })).toBeVisible();
@@ -135,6 +136,47 @@ test('browser downloads complete natively without creating server jobs', async (
   await expect(page.getByText('Download requested. Check your browser downloads.', { exact: true })).toBeVisible();
   const after = await page.request.get('/api/v1/downloads');
   expect((await after.json() as { downloads: unknown[] }).downloads.length).toBe(beforeJobs);
+});
+
+test('browser transfer works without server destination access', async ({ page }, testInfo) => {
+  let destinationRequests = 0;
+  await page.route('**/api/v1/destinations**', async (route) => {
+    destinationRequests++;
+    await route.fulfill({ status: 503, json: { code: 'unavailable', message: 'No destination access' } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('checkbox', { name: 'Select readme.txt', exact: true }).check();
+  await page.locator('.selection-bar').getByRole('button', { name: 'Download to this device' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Download to this device' });
+  await expect(dialog).toContainText('Your browser saves these files on this device.');
+  await expect(dialog.getByRole('combobox', { name: 'Destination' })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('browser-transfer-desktop.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('browser-transfer-phone.png'), animations: 'disabled' });
+  const received = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Download', exact: true }).click();
+  const download = await received;
+  expect(download.suggestedFilename()).toBe('readme.txt');
+  expect(await download.failure()).toBeNull();
+  expect(destinationRequests).toBe(0);
+});
+
+test('server transfer explains its built-in location and optional host folders', async ({ page }, testInfo) => {
+  await page.route('**/api/v1/destinations', async (route) => {
+    await route.fulfill({ json: { destinations: [
+      { id: 'server', label: 'Server downloads', available_bytes: null, available: true, browseable: false },
+    ] } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('checkbox', { name: 'Select readme.txt', exact: true }).check();
+  await page.locator('.selection-bar').getByRole('button', { name: 'Save to server' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Save to server' });
+  await expect(dialog.getByRole('combobox', { name: 'Destination' })).toHaveValue('server');
+  await expect(dialog).toContainText("This is Folderhug's built-in downloads folder.");
+  await expect(dialog).toContainText('To save into a host folder, mount it directly under /mnt in Compose and restart Folderhug.');
+  await page.screenshot({ path: testInfo.outputPath('server-transfer-desktop.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('server-transfer-phone.png'), animations: 'disabled' });
 });
 
 test('server downloads complete and expose a separate browser download', async ({ page }, testInfo) => {

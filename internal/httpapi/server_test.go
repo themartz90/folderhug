@@ -36,7 +36,7 @@ func TestUnknownAPIDoesNotServeFrontend(t *testing.T) {
 	app := &Server{}
 	h := app.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Fatal("API request reached frontend") }))
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/missing", nil))
+	h.ServeHTTP(w, httptest.NewRequest("GET", "http://localhost/api/v1/missing", nil))
 	if w.Code != 404 || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("unexpected response: %d %s", w.Code, w.Body.String())
 	}

@@ -38,7 +38,7 @@ func (s *Service) publishMounted(ctx context.Context, j job) error {
 	}
 	s.cleanupMountedStaging(j)
 	if root, ok := s.mounts[j.DestinationID]; ok {
-		if mount, err := downloadfs.OpenMount(root.Path); err == nil {
+		if mount, err := openMountedRoot(root); err == nil {
 			_ = mount.Cleanup(j.DestinationPath, j.ID)
 			mount.Close()
 		}
@@ -71,7 +71,7 @@ func (s *Service) prepareMounted(ctx context.Context, j job) (*downloadfs.Prepar
 	if hash != j.checksum {
 		return nil, ErrRestart
 	}
-	mount, err := downloadfs.OpenMount(root.Path)
+	mount, err := openMountedRoot(root)
 	if err != nil {
 		return nil, ErrDestinationUnavailable
 	}

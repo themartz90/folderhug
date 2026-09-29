@@ -386,7 +386,7 @@ func (s *Service) reconcile(ctx context.Context) error {
 				if j.DestinationID != "server" {
 					s.cleanupMountedStaging(j)
 					if root, ok := s.mounts[j.DestinationID]; ok {
-						if mount, openErr := downloadfs.OpenMount(root.Path); openErr == nil {
+						if mount, openErr := openMountedRoot(root); openErr == nil {
 							_ = mount.Cleanup(j.DestinationPath, j.ID)
 							mount.Close()
 						}

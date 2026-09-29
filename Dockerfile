@@ -34,6 +34,8 @@ COPY --from=build /out/folderhug /usr/local/bin/folderhug
 RUN ln -s folderhug /usr/local/bin/http-wrapper
 COPY LICENSE docs/THIRD_PARTY_NOTICES.md docs/THIRD_PARTY_LICENSES.txt /usr/share/doc/folderhug/
 COPY web/public/brand/FONT-LICENSE.txt /usr/share/doc/folderhug/FONT-LICENSE.txt
+ENV GOMEMLIMIT=384MiB \
+    FOLDERHUG_CONTAINER=1
 USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["folderhug"]

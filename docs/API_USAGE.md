@@ -52,7 +52,7 @@ Omitted and empty `q` have the same meaning. A nonempty `q` performs a name sear
 
 ## Queue one server download
 
-Creating and managing a server job requires `downloads:write`. Use a file ID from a listing or indexed result. The destination ID `server` maps to the configured downloads directory. Owner sessions can also choose a configured mount and an existing folder relative to it with `destination_path`. API tokens remain limited to `server`; requests cannot supply an arbitrary host path.
+The web UI's **Download to this device** action saves through the browser and needs no server destination. This example creates a **Save to server** job through the API. Creating and managing that job requires `downloads:write`. Use a file ID from a listing or indexed result. The destination ID `server` maps to the configured downloads directory. Owner sessions can also choose a discovered or explicitly configured mount and an existing folder relative to it with `destination_path`. API tokens remain limited to `server`; requests cannot supply an arbitrary host path.
 
 ```powershell
 $entryID = Read-Host 'File entry ID'
@@ -83,7 +83,7 @@ Login and setup accept `remember_me: true` to request a remembered browser sessi
 
 Scopes are independent. A download script that first browses needs both `browse:read` and `downloads:write`. Owner-only actions include profile configuration and testing, remembered credentials, token management, preferences, bookmarks, and completed-file deletion. Tokens cannot borrow an owner's temporary credentials or control another token's jobs. Revocation or expiry stops authorized in-flight work.
 
-An invalid bearer token never falls back to an owner cookie. Cookie-based clients must send the `X-CSRF-Token` returned by `GET /auth/session` and the configured `Origin` on authenticated mutations, including refresh and sign-out. Setup and login check `Origin` but do not require an existing CSRF token. Do not put either owner or source passwords in URLs.
+An invalid bearer token never falls back to an owner cookie. Cookie-based clients must send the `X-CSRF-Token` returned by `GET /auth/session` and the browser's `Origin` on authenticated mutations, including refresh and sign-out. Setup and login check `Origin` but do not require an existing CSRF token. By default, the app accepts localhost and literal IP origins at its listening port; `FOLDERHUG_PUBLIC_URL` pins it to one exact origin. Do not put either owner or source passwords in URLs.
 
 Errors contain `code`, `message`, and `request_id`. A `401` means app authentication is missing or invalid; source authentication failures have a separate upstream error. Missing and inaccessible objects are not disclosed to token callers. Respect `Retry-After` on `429` and `503` responses.
 

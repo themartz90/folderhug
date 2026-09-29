@@ -105,7 +105,8 @@ func (s *Server) authorized(owner bool, scope string, next func(http.ResponseWri
 }
 
 func (s *Server) validOrigin(r *http.Request) bool {
-	return s.Config.PublicURL != nil && r.Header.Get("Origin") == s.Config.PublicURL.String()
+	origin, allowed := s.requestOrigin(r)
+	return allowed && r.Header.Get("Origin") == origin
 }
 
 // Long responses stop when their session or token expires or is revoked.
@@ -218,8 +219,8 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 		rateMu.Lock()
 		delete(attempts, ip)
 		rateMu.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
-		http.SetCookie(w, &http.Cookie{Name: legacySessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
+		http.SetCookie(w, &http.Cookie{Name: legacySessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		writeJSON(w, 200, session)
 	}
 	mux.HandleFunc("POST /api/v1/auth/login", loginOrSetup)
@@ -239,7 +240,7 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			return
 		}
 		if raw != "" {
-			http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
+			http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: raw, Path: "/", HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode, Expires: session.CookieExpiresAt})
 		}
 		writeJSON(w, 200, session)
 	}))
@@ -252,7 +253,7 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			s.Profiles.ClearOwnerSessions()
 		}
 		for _, name := range []string{SessionCookieName, legacySessionCookieName} {
-			http.SetCookie(w, &http.Cookie{Name: name, Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+			http.SetCookie(w, &http.Cookie{Name: name, Path: "/", HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		}
 		w.WriteHeader(204)
 	}))
@@ -264,7 +265,7 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 		}
 		s.Profiles.ClearPrincipal(profiles.LeaseID(p))
 		for _, name := range []string{SessionCookieName, legacySessionCookieName} {
-			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", HttpOnly: true, Secure: s.Config.PublicURL.Scheme == "https", SameSite: http.SameSiteStrictMode, MaxAge: -1})
+			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		}
 		w.WriteHeader(204)
 	}))

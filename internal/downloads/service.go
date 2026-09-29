@@ -62,6 +62,13 @@ func (s *Service) ConfigureMounts(roots []MountedRoot) {
 	}
 }
 
+func openMountedRoot(root MountedRoot) (*downloadfs.Mount, error) {
+	if root.GuardMount {
+		return downloadfs.OpenMountChecked(root.Path, root.ProtectedPaths)
+	}
+	return downloadfs.OpenMount(root.Path)
+}
+
 func (s *Service) Destinations(owner bool) ([]Destination, error) {
 	available, err := s.files.AvailableBytes()
 	if err != nil {
@@ -71,7 +78,7 @@ func (s *Service) Destinations(owner bool) ([]Destination, error) {
 	if owner {
 		for _, root := range s.mounts {
 			item := Destination{ID: root.ID, Label: root.Label, Browseable: true}
-			mount, e := downloadfs.OpenMount(root.Path)
+			mount, e := openMountedRoot(root)
 			if e == nil {
 				item.Available = true
 				item.AvailableBytes, _ = mount.AvailableBytes()
@@ -92,7 +99,7 @@ func (s *Service) Folders(owner bool, id, path string) (FolderPage, error) {
 	if !downloadfs.ValidFolder(path) {
 		return FolderPage{}, ErrInvalid
 	}
-	mount, err := downloadfs.OpenMount(root.Path)
+	mount, err := openMountedRoot(root)
 	if err != nil {
 		return FolderPage{}, ErrDestinationUnavailable
 	}
@@ -171,7 +178,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in Input, key st
 		if !p.Owner || !ok {
 			return Download{}, ErrNotFound
 		}
-		mount, e := downloadfs.OpenMount(root.Path)
+		mount, e := openMountedRoot(root)
 		if e != nil {
 			return Download{}, ErrDestinationUnavailable
 		}
@@ -551,7 +558,7 @@ func (s *Service) Completed(ctx context.Context, p auth.Principal, id string) (*
 		if !ok || j.mountedName == "" {
 			return nil, Download{}, ErrDestinationUnavailable
 		}
-		mount, e := downloadfs.OpenMount(root.Path)
+		mount, e := openMountedRoot(root)
 		if e != nil {
 			return nil, Download{}, ErrDestinationUnavailable
 		}
@@ -635,7 +642,7 @@ func (s *Service) reset(ctx context.Context, j job) error {
 		if !ok {
 			return ErrDestinationUnavailable
 		}
-		mount, err := downloadfs.OpenMount(root.Path)
+		mount, err := openMountedRoot(root)
 		if err != nil {
 			return ErrDestinationUnavailable
 		}

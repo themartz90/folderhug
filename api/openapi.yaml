@@ -10,7 +10,8 @@ info:
     Credentials and bearer secrets must never appear in URLs, logs or read responses.
 
     Cookie-authenticated mutations require the X-CSRF-Token from GET /auth/session and a
-    matching configured Origin. Login and first-run setup check Origin without an existing CSRF
+    matching Origin. Without a public URL, the Origin must match the request's localhost
+    or IP address. An explicit public URL pins the accepted Origin. Login and first-run setup check Origin without an existing CSRF
     token. Bearer requests use Authorization and cannot fall back to a cookie on failure.
 
     Entry IDs are opaque and profile-bound. The reserved directory ID root refers to the
@@ -84,7 +85,7 @@ paths:
     post:
       operationId: setupOwner
       security: []
-      description: Claim a fresh installation once. Requires the configured Origin and a JSON body. Passwords need at least six Unicode characters and at most 1024 UTF-8 bytes.
+      description: Claim a fresh installation once. Requires a matching Origin and a JSON body. Passwords need at least six Unicode characters and at most 1024 UTF-8 bytes.
       requestBody: { $ref: '#/components/requestBodies/Login' }
       responses:
         '200': { $ref: '#/components/responses/Session' }

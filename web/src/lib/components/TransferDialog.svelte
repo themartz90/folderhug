@@ -43,6 +43,7 @@
     onscanstarted?: (scan: Scan, directOnly: boolean, types: FileType[]) => void;
   } = $props();
   let destinations = $state<Schema['Destination'][]>([]);
+  let destinationsReady = $state(false);
   let destination = $state('');
   let folder = $state('');
   let folderInput = $state('');
@@ -146,6 +147,7 @@
       })
         .then((result) => {
           destinations = result.destinations;
+          destinationsReady = true;
           const last = preferences.last_destination;
           const selected = last?.destination_id ?? destinations[0]?.id ?? '';
           destination = selected;
@@ -153,7 +155,7 @@
             void openFolder(selected, last?.path ?? '');
           else if (selected) folderError = 'This saved location is unavailable. Choose another destination.';
         })
-        .catch((e) => (error = errorMessage(e)));
+        .catch((e) => { error = errorMessage(e); destinationsReady = true; });
     return () => controller.abort();
   });
   async function submit(event: SubmitEvent) {
@@ -246,7 +248,7 @@
       {mode === 'scan'
         ? 'Choose where to look and which files to show. This does not download files.'
         : mode === 'server'
-          ? 'Files are saved on the server running Folderhug.'
+          ? 'Files are saved on the server running Folderhug, not this device.'
           : 'Your browser saves these files on this device. It may ask you to allow multiple downloads.'}
     </p>
     {#if error}<p class="error-banner" role="alert">
@@ -341,6 +343,8 @@
               >{/each}</select
           ></label
         >
+        {#if currentDestination?.id === 'server'}<p class="field-help">This is Folderhug's built-in downloads folder.</p>{/if}
+        {#if destinationsReady && destinations.length === 1 && destinations[0]?.id === 'server'}<p class="field-help">To save into a host folder, mount it directly under /mnt in Compose and restart Folderhug.</p>{/if}
         {#if currentDestination?.browseable}
           <div class="destination-picker">
             <label class="form-field">Folder inside {currentDestination.label}

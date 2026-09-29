@@ -73,7 +73,11 @@ type Destination struct {
 	Browseable     bool   `json:"browseable"`
 }
 
-type MountedRoot struct{ ID, Label, Path string }
+type MountedRoot struct {
+	ID, Label, Path string
+	GuardMount      bool     `json:"-"`
+	ProtectedPaths  []string `json:"-"`
+}
 type Folder struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
