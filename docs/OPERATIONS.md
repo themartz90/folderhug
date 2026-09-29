@@ -5,14 +5,12 @@ The core deployment uses one app container and SQLite. The default `compose.yaml
 ## First start
 
 ```sh
-docker compose pull
-docker compose up -d app
-docker compose ps
+docker compose up -d
 ```
 
 Open `http://localhost:8080` on the host. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Finish this step before exposing the address to anyone else, since the first visitor can claim the owner account.
 
-The port binds to loopback by default. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
+The port binds to loopback by default. To check the container's status, run `docker compose ps`. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
 
 The CLI setup command remains available for an operator who needs to initialize the owner before opening the browser: `docker compose --profile tools run --rm setup`. It prompts in the terminal and refuses to replace an existing owner. It is optional for an ordinary first start.
 
@@ -26,7 +24,7 @@ Clone the repository to get the build context and use `compose.build.yaml` as an
 git clone https://github.com/themartz90/folderhug.git
 cd folderhug
 docker compose -f compose.yaml -f compose.build.yaml build app
-docker compose -f compose.yaml -f compose.build.yaml up -d app
+docker compose -f compose.yaml -f compose.build.yaml up -d
 ```
 
 Both modes use the same volumes when the Compose project name stays the same. Do not run two app containers against those volumes at once. Record the source revision or image digest before updating.

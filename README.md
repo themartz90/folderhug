@@ -14,9 +14,7 @@ On a Linux host with Docker Compose, download the Compose file and start Folderh
 mkdir folderhug
 cd folderhug
 curl -fL https://raw.githubusercontent.com/themartz90/folderhug/main/compose.yaml -o compose.yaml
-docker compose pull
-docker compose up -d app
-docker compose ps
+docker compose up -d
 ```
 
 Open `http://localhost:8080` on the host and create the owner password in the browser. The first visitor to a fresh installation can claim the owner account, so complete setup before exposing the address to anyone else. The password needs at least 6 characters, with no required character types, and can be up to 1,024 UTF-8 bytes.
@@ -46,7 +44,7 @@ services:
           create_host_path: false
 ```
 
-Create `/srv/media` first and give the container's UID/GID 10001 write access. Check existing media permissions before changing them. Then start with `docker compose -f compose.yaml -f compose.mounts.yaml up -d app` and keep both files in later update commands. Mounted jobs stage a copy in `/downloads`, so that volume also needs space for the file. See [downloads and mounted folders](docs/DOWNLOADS.md) for limits and resume behavior.
+Create `/srv/media` first and give the container's UID/GID 10001 write access. Check existing media permissions before changing them. Then start with `docker compose -f compose.yaml -f compose.mounts.yaml up -d` and keep both files in later update commands. Mounted jobs stage a copy in `/downloads`, so that volume also needs space for the file. See [downloads and mounted folders](docs/DOWNLOADS.md) for limits and resume behavior.
 
 ## Local development
 
