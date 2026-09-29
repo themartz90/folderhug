@@ -94,15 +94,18 @@ test('branded grid keeps long names, extensions and keyboard focus readable', as
   await expect(tile).toBeVisible();
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator('.app')).toHaveAttribute('data-theme', theme);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       for (const size of ['small', 'medium', 'large']) {
         await page.getByLabel('Grid size').selectOption(size);
         const name = tile.locator('.file-name');
         await expect(name).toHaveCSS('font-size', '13px');
-        expect(await name.evaluate((element) => getComputedStyle(element).color)).toBe(
-          await tile.evaluate((element) => getComputedStyle(element).color),
-        );
+        const colors = await tile.evaluate((element) => ({
+          name: getComputedStyle(element.querySelector('.file-name')!).color,
+          tile: getComputedStyle(element).color,
+        }));
+        expect(colors.name).toBe(colors.tile);
         const extension = name.locator('span').last();
         await expect(extension).toHaveText('.txt');
         const nameBox = (await name.boundingBox())!;
