@@ -83,7 +83,7 @@ test('branded grid keeps long names, extensions and keyboard focus readable', as
   await expect(page.locator('.app')).toHaveCSS('--accent', '#285ED1');
   await page.getByRole('button', { name: 'Appearance', exact: true }).click();
   await page.getByRole('radio', { name: 'Amber', exact: true }).check();
-  await expect(page.locator('.app')).toHaveCSS('--accent', '#95630A');
+  await expect(page.locator('.app')).toHaveCSS('--accent', '#AD5426');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Appearance', exact: true })).not.toBeVisible();
   await page.reload();
@@ -95,6 +95,7 @@ test('branded grid keeps long names, extensions and keyboard focus readable', as
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator('.app')).toHaveAttribute('data-theme', theme);
+    await expect(page.locator('.app')).toHaveCSS('--accent', theme === 'light' ? '#AD5426' : '#EAB079');
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       for (const size of ['small', 'medium', 'large']) {

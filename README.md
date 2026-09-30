@@ -6,6 +6,15 @@ Folderhug is a self-hosted file explorer for HTTP directory listings, such as a 
 
 You can switch between list and grid views, filter a folder, pin folders, and use Find files to search subfolders. Folderhug has one owner account. Image thumbnails work in the app; video posters need the optional media worker. Playback depends on your browser and the file's codec.
 
+## Screenshots
+
+Default Amber in light and dark mode, using synthetic files and illustrations. The first row shows file selection and download actions; the second shows grid thumbnails and image filtering. Click a screenshot to open it at full size.
+
+| Light mode | Dark mode |
+| --- | --- |
+| [![Light mode details view with selected files and download actions](docs/assets/screenshots/details-light.png)](docs/assets/screenshots/details-light.png) | [![Dark mode details view with selected files and download actions](docs/assets/screenshots/details-dark.png)](docs/assets/screenshots/details-dark.png) |
+| [![Light mode grid view with image thumbnails and filtering](docs/assets/screenshots/grid-light.png)](docs/assets/screenshots/grid-light.png) | [![Dark mode grid view with image thumbnails and filtering](docs/assets/screenshots/grid-dark.png)](docs/assets/screenshots/grid-dark.png) |
+
 ## Install with Docker Compose
 
 On a Linux host with Docker Compose, download the Compose file:

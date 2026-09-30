@@ -25,7 +25,7 @@
     { id: 'teal', label: 'Teal', light: '#087F7A', dark: '#73D1C6' },
     { id: 'violet', label: 'Violet', light: '#7651BD', dark: '#C4A5F5' },
     { id: 'rose', label: 'Rose', light: '#B03E65', dark: '#F3A2BC' },
-    { id: 'amber', label: 'Amber', light: '#95630A', dark: '#EAC279' },
+    { id: 'amber', label: 'Amber', light: '#AD5426', dark: '#EAB079' },
     { id: 'graphite', label: 'Graphite', light: '#536173', dark: '#B4C0D0' },
   ] as const;
   let systemDark = $state(false);

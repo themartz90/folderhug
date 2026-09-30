@@ -109,7 +109,7 @@
     teal: ['#087F7A', '#73D1C6'],
     violet: ['#7651BD', '#C4A5F5'],
     rose: ['#B03E65', '#F3A2BC'],
-    amber: ['#95630A', '#EAC279'],
+    amber: ['#AD5426', '#EAB079'],
     graphite: ['#536173', '#B4C0D0'],
   };
   const navigation = [
