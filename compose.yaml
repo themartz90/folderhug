@@ -33,7 +33,8 @@ services:
   app:
     image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
     ports:
-      - "${FOLDERHUG_PORT-${HTTPWRAPPER_PORT:-8080}}:8080"
+      # Host port defaults to 48321; the app listens on 8080 inside the container.
+      - "${FOLDERHUG_PORT-${HTTPWRAPPER_PORT:-48321}}:8080"
     environment:
       # Optional overrides. IP access and folders mounted under /mnt work without changes here.
       FOLDERHUG_PUBLIC_URL: "${FOLDERHUG_PUBLIC_URL-${HTTPWRAPPER_PUBLIC_URL:-}}"

@@ -2,6 +2,8 @@
 
 Use Go 1.27.1, Node 24, and npm 11.5.1 or newer within major version 11. The repository pins Node 24.21.0 in `.node-version`; `web/package.json` records npm 11.19.0. The examples below use PowerShell from the repository root. Docker and WSL are not required for native app development.
 
+Native development uses port `8080`. Docker Compose publishes host port `48321` by default.
+
 ## Local testing without a password
 
 After building the frontend, run `go run ./cmd/folderhug dev` from the repository root and open `http://localhost:8080`. This command creates its own state in `.local/dev` and signs you in automatically. No setup command or password entry is needed. It accepts only loopback connections and a localhost or loopback public URL. Keep it local; do not expose it through a proxy or tunnel.

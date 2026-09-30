@@ -22,7 +22,9 @@ If you want to save files in a host folder, add the optional [mount below](#down
 docker compose up -d
 ```
 
-Open `http://localhost:8080` on the server, or `http://SERVER-IP:8080` from a device on your LAN. Create the owner password in the browser. Anyone who can reach a fresh installation can claim the owner account, so finish setup before sharing the address or exposing it outside your trusted network. The app creates its credential key on first start.
+Open `http://localhost:48321` on the server, or `http://SERVER-IP:48321` from a device on your LAN. Create the owner password in the browser. Anyone who can reach a fresh installation can claim the owner account, so finish setup before sharing the address or exposing it outside your trusted network. The app creates its credential key on first start.
+
+The default host port is `48321`, chosen to reduce clashes with other self-hosted apps. Set `FOLDERHUG_PORT` to use another port.
 
 The default Compose file pulls `ghcr.io/themartz90/folderhug:latest`. You do not need a `.env` file for ordinary LAN access. See [operations and backups](docs/OPERATIONS.md) for a custom address, an HTTPS reverse proxy, updates, or a source build.
 

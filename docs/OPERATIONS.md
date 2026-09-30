@@ -8,9 +8,9 @@ The core deployment uses one app container and SQLite. The default `compose.yaml
 docker compose up -d
 ```
 
-Open `http://localhost:8080` on the host or `http://SERVER-IP:8080` from your LAN. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Anyone who can reach an unclaimed installation can create the owner account, so finish this step on a trusted network before sharing the address or exposing it outside the LAN.
+Open `http://localhost:48321` on the host or `http://SERVER-IP:48321` from your LAN. A fresh installation prepares its credential key and asks the first visitor to create the owner password. Use at least 6 Unicode characters, with no required character types and a maximum of 1,024 UTF-8 bytes. Anyone who can reach an unclaimed installation can create the owner account, so finish this step on a trusted network before sharing the address or exposing it outside the LAN.
 
-The default Compose file publishes port 8080 on the host. To check the container's status, run `docker compose ps`. Check `http://localhost:8080/health/ready` for database readiness; it does not check upstream sources.
+The default Compose file publishes host port `48321` to port `8080` inside the container. To check the container's status, run `docker compose ps`. Check `http://localhost:48321/health/ready` for database readiness; it does not check upstream sources.
 
 The CLI setup command remains available for an operator who needs to initialize the owner before opening the browser: `docker compose --profile tools run --rm setup`. It prompts in the terminal and refuses to replace an existing owner. It is optional for an ordinary first start.
 
@@ -34,6 +34,8 @@ The remaining examples use the default image installation without overlays. If y
 ```sh
 export FOLDERHUG_PORT=18080
 ```
+
+Then run `docker compose up -d` and open `http://SERVER-IP:18080`. If you used an older Compose file with host port `8080`, set `FOLDERHUG_PORT=8080` before starting with the updated file to keep that address.
 
 With no explicit public URL, Folderhug accepts `localhost` and literal IP addresses at the selected port. For a custom hostname or HTTPS reverse proxy, set `FOLDERHUG_PUBLIC_URL` to the exact external origin.
 
@@ -70,7 +72,7 @@ Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. 
 
 The public URL is an origin, with no path, query, fragment, or credentials. Automatic origin checks accept localhost and literal IP addresses; forwarded headers are not trusted for this decision. For an external custom hostname or access outside a trusted LAN, configure an HTTPS reverse proxy and set the exact `FOLDERHUG_PUBLIC_URL`. The proxy must preserve the public Host and Origin headers, disable response buffering for streaming downloads, and allow long responses and server-sent events. Deployment under a URL subpath is not supported.
 
-[examples/nginx.conf](../examples/nginx.conf) is a configuration for nginx on the same host. It sends requests to `127.0.0.1:8080`, so set `FOLDERHUG_PORT=127.0.0.1:8080` before starting Compose if you use it. Replace `files.example.test` and the certificate paths, provide a valid certificate and key, and set `FOLDERHUG_PUBLIC_URL=https://files.example.test`. If nginx already serves other applications, adapt the server block into that installation rather than replacing its entire configuration. A proxy in another container needs a different upstream address: its own `127.0.0.1` is not the host's app port.
+[examples/nginx.conf](../examples/nginx.conf) is a configuration for nginx on the same host. It sends requests to `127.0.0.1:48321`, so set `FOLDERHUG_PORT=127.0.0.1:48321` before starting Compose if you use it. Replace `files.example.test` and the certificate paths, provide a valid certificate and key, and set `FOLDERHUG_PUBLIC_URL=https://files.example.test`. If nginx already serves other applications, adapt the server block into that installation rather than replacing its entire configuration. A proxy in another container needs a different upstream address: its own `127.0.0.1` is not the host's app port.
 
 The example keeps Host unchanged and lets nginx forward Origin, authorization, cookies, and range headers. It uses HTTP/1.1, disables response buffering and caching, and allows a 24-hour gap between upstream reads for long downloads and event streams. These directives follow the [nginx proxy module documentation](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
 

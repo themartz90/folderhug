@@ -4,10 +4,12 @@ The implemented contract is [api/openapi.yaml](../api/openapi.yaml). Paths start
 
 ## Connect and browse
 
+These examples use the default Compose host port, `48321`. Adjust `$base` for your installation; native development uses port `8080`.
+
 Keep the token out of URLs and command history. Read it into this process and clear it when finished:
 
 ```powershell
-$base = 'http://localhost:8080/api/v1'
+$base = 'http://localhost:48321/api/v1'
 $token = Read-Host 'API token' -MaskInput
 $headers = @{ Authorization = "Bearer $token" }
 $profiles = Invoke-RestMethod "$base/profiles" -Headers $headers
