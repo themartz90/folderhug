@@ -2,18 +2,6 @@
 name: http-wrapper
 
 services:
-  media-setup:
-    profiles: [tools]
-    image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
-    command: [setup-media]
-    environment:
-      FOLDERHUG_WORKER_KEY: /worker-key/worker.key
-    volumes:
-      - worker-key:/worker-key
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    network_mode: none
   setup:
     profiles: [tools]
     image: ${FOLDERHUG_IMAGE:-ghcr.io/themartz90/folderhug:latest}
@@ -68,4 +56,3 @@ volumes:
   keys:
   downloads:
   cache:
-  worker-key:

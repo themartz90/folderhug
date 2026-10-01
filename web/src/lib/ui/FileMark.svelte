@@ -20,7 +20,7 @@
   class:image={entry.category === 'image'}
   class:video={entry.category === 'video'}
 >
-  {#if thumbnail && !failed}<img
+  {#if entry.category === 'image' && thumbnail && !failed}<img
       src={thumbnail}
       alt=""
       loading="lazy"

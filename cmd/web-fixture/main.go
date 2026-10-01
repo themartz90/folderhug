@@ -127,7 +127,7 @@ func run() error {
 	defer app.Thumbnails.Close()
 	app.Preferences = preferences.New(db.DB, profileService, app.Catalog)
 	app.StatusProvider = func(context.Context) (preferences.Status, error) {
-		return preferences.Status{ImageThumbnails: true, VideoWorker: "disabled", CacheMaxBytes: cfg.ThumbnailCacheBytes, StreamMaxBytes: cfg.StreamMaxBytes, ServerDownloads: true, SegmentedDownloads: true}, nil
+		return preferences.Status{ImageThumbnails: true, CacheMaxBytes: cfg.ThumbnailCacheBytes, StreamMaxBytes: cfg.StreamMaxBytes, ServerDownloads: true, SegmentedDownloads: true}, nil
 	}
 	seeded := make(map[string]profiles.Profile)
 	if !unclaimed {

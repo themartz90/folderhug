@@ -144,7 +144,7 @@ func (s *Server) preferenceRoutes(mux *http.ServeMux) {
 			return
 		}
 		status, err := s.StatusProvider(r.Context())
-		if err != nil || status.CacheMaxBytes < 0 || status.StreamMaxBytes < 0 || (status.VideoWorker != "disabled" && status.VideoWorker != "ready" && status.VideoWorker != "unavailable") {
+		if err != nil || status.CacheMaxBytes < 0 || status.StreamMaxBytes < 0 {
 			problem(w, r, 503, "unavailable", "Application status is unavailable.")
 			return
 		}

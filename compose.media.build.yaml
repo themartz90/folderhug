@@ -1,7 +1,0 @@
-services:
-  media:
-    image: folderhug-media:local
-    pull_policy: build
-    build:
-      context: .
-      target: media

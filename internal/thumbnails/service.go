@@ -45,7 +45,6 @@ type Service struct {
 	catalog         *catalog.Service
 	fetcher         Fetcher
 	events          *events.Hub
-	video           VideoGenerator
 	root            *os.Root
 	secret          []byte
 	ctx             context.Context
@@ -57,7 +56,7 @@ type Service struct {
 	refs            map[string]int
 	retired         map[string]int64
 	bytes, maxBytes int64
-	images, videos  chan task
+	images          chan task
 	decodeSlots     chan struct{}
 	now             func() time.Time
 }
@@ -107,14 +106,10 @@ func New(db *sql.DB, profileService *profiles.Service, authentication *auth.Serv
 	ctx, cancel := context.WithCancel(context.Background())
 	secret := make([]byte, 32)
 	rand.Read(secret)
-	s := &Service{db: db, profiles: profileService, auth: authentication, catalog: catalogService, fetcher: fetcher, events: hub, video: config.Video, root: root, secret: secret, ctx: ctx, cancel: cancel, queued: map[string]struct{}{}, refs: map[string]int{}, retired: map[string]int64{}, maxBytes: config.MaxBytes, images: make(chan task, 100), videos: make(chan task, 100), decodeSlots: make(chan struct{}, 2), now: time.Now}
+	s := &Service{db: db, profiles: profileService, auth: authentication, catalog: catalogService, fetcher: fetcher, events: hub, root: root, secret: secret, ctx: ctx, cancel: cancel, queued: map[string]struct{}{}, refs: map[string]int{}, retired: map[string]int64{}, maxBytes: config.MaxBytes, images: make(chan task, 100), decodeSlots: make(chan struct{}, 2), now: time.Now}
 	for i := 0; i < 2; i++ {
 		s.wg.Add(1)
 		go s.worker(s.images)
-	}
-	if s.video != nil {
-		s.wg.Add(1)
-		go s.worker(s.videos)
 	}
 	return s, nil
 }
@@ -211,7 +206,7 @@ func (s *Service) Request(ctx context.Context, p auth.Principal, profileID strin
 		state := "pending"
 		if !input.profile.Previews {
 			state = "disabled"
-		} else if input.entry.Kind != "file" || (input.entry.Category != "image" && input.entry.Category != "video") || input.entry.Category == "video" && s.video == nil {
+		} else if input.entry.Kind != "file" || input.entry.Category != "image" {
 			state = "unavailable"
 		}
 		if state == "pending" && len(s.queued) >= 100 {
@@ -229,11 +224,7 @@ func (s *Service) Request(ctx context.Context, p auth.Principal, profileID strin
 		if state == "pending" {
 			s.queued[r.ID] = struct{}{}
 			job := task{id: r.ID, profileID: profileID, entryID: input.entry.ID, key: input.key, principal: p}
-			queue := s.images
-			if input.entry.Category == "video" {
-				queue = s.videos
-			}
-			queue <- job
+			s.images <- job
 		}
 		result = append(result, r.Thumbnail)
 	}
@@ -372,7 +363,7 @@ func (s *Service) process(job task) {
 		return
 	}
 	profile, entry, key, err := s.resolve(ctx, p, job.profileID, job.entryID)
-	if err != nil || key != job.key || !profile.Previews {
+	if err != nil || key != job.key || !profile.Previews || entry.Kind != "file" || entry.Category != "image" {
 		s.finish(job, nil, "", false)
 		return
 	}
@@ -383,21 +374,7 @@ func (s *Service) process(job task) {
 		s.finish(job, nil, "", false)
 		return
 	}
-	var body []byte
-	validator := ""
-	reused := false
-	if entry.Category == "video" {
-		if s.video != nil {
-			body, err = s.video.Generate(ctx, VideoRequest{ProfileID: profile.ID, EntryID: entry.ID, Generation: profile.Generation, Principal: p})
-			if err == nil && (len(body) < 2 || body[0] != 0xff || body[1] != 0xd8) {
-				err = ErrImage
-			}
-		} else {
-			err = ErrImage
-		}
-	} else {
-		body, validator, reused, err = s.fetchImage(ctx, p, profile, entry, old)
-	}
+	body, validator, reused, err := s.fetchImage(ctx, p, profile, entry, old)
 	if err == nil && !reused {
 		select {
 		case s.decodeSlots <- struct{}{}:

@@ -608,6 +608,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Generate bounded image thumbnails. No upstream content is fetched for non-image entries. */
         post: operations["requestThumbnails"];
         delete?: never;
         options?: never;
@@ -1029,11 +1030,6 @@ export interface components {
         };
         Status: {
             image_thumbnails: boolean;
-            /**
-             * @description Ready means an authenticated worker polled within the last 15 seconds.
-             * @enum {string}
-             */
-            video_worker: "disabled" | "ready" | "unavailable";
             cache_max_bytes: number;
             stream_max_bytes: number;
             server_downloads: boolean;
@@ -2340,7 +2336,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Configured capabilities and current video worker availability. No private paths or source URLs. */
+            /** @description Configured capabilities. No private paths or source URLs. */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -14,7 +14,6 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/folderhug ./cmd/folderhug
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/media-worker ./cmd/media-worker
 
 FROM build AS test
 COPY tests ./tests
@@ -29,7 +28,7 @@ LABEL org.opencontainers.image.source="https://github.com/themartz90/folderhug" 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \
-    && mkdir /data /keys /downloads /cache /broker /worker-key && chown app:app /data /keys /downloads /cache /broker /worker-key
+    && mkdir /data /keys /downloads /cache && chown app:app /data /keys /downloads /cache
 COPY --from=build /out/folderhug /usr/local/bin/folderhug
 RUN ln -s folderhug /usr/local/bin/http-wrapper
 COPY LICENSE docs/THIRD_PARTY_NOTICES.md docs/THIRD_PARTY_LICENSES.txt /usr/share/doc/folderhug/
@@ -40,29 +39,3 @@ USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["folderhug"]
 CMD ["serve"]
-
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS media
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.source="https://github.com/themartz90/folderhug" \
-      org.opencontainers.image.title="Folderhug media worker" \
-      org.opencontainers.image.description="Video thumbnails for Folderhug" \
-      org.opencontainers.image.revision=$VCS_REF
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg=7:5.1.9-0+deb12u1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \
-    && mkdir /broker /worker-key /usr/share/folderhug \
-    && chown app:app /broker /worker-key \
-    && ffmpeg -buildconf > /usr/share/folderhug/ffmpeg-build.txt 2>&1 \
-    && dpkg-query -W > /usr/share/folderhug/packages.txt
-COPY --from=build /out/media-worker /usr/local/bin/media-worker
-COPY LICENSE docs/THIRD_PARTY_NOTICES.md docs/THIRD_PARTY_LICENSES.txt /usr/share/doc/folderhug/
-USER 10001:10001
-ENTRYPOINT ["media-worker"]
-
-FROM test AS media-test-build
-RUN CGO_ENABLED=0 go test -c -o /out/mediaworker.test ./internal/mediaworker \
-    && CGO_ENABLED=0 go test -c -o /out/mediabroker.test ./internal/mediabroker \
-    && CGO_ENABLED=0 go test -c -o /out/thumbnails.test ./internal/thumbnails
-FROM media AS media-test
-COPY --from=media-test-build /out/mediaworker.test /out/mediabroker.test /out/thumbnails.test /usr/local/bin/
-COPY scripts/generate-media-fixtures.sh /usr/local/bin/generate-media-fixtures

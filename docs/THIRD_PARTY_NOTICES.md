@@ -2,7 +2,7 @@
 
 Folderhug's original source is covered by the repository's [MIT license](../LICENSE). Dependencies keep their own copyright notices and license terms. [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt) contains the license texts copied from the dependency versions below, including the additional notices shipped with modernc libraries.
 
-## Native app and worker
+## Native app
 
 The inventory below follows the modules required by `go.mod`. Which packages enter a binary depends on the target platform and build. The Go 1.27.1 standard-library license is included in the appendix as well.
 
@@ -33,12 +33,12 @@ The Folderhug wordmark uses outlined Nunito ExtraBold shapes. Nunito is copyrigh
 
 The lockfile also records development tools, including Vite, TypeScript, ESLint, Vitest, Playwright, and the OpenAPI generator. Their packages and downloaded browser builds retain their own licenses. `web/package-lock.json` identifies the npm package versions and license metadata. Development tools are not installed in the final app image. This document lists source dependencies; the package inventory for an image depends on its exact build.
 
-## Container packages and FFmpeg
+## Container packages
 
-The app image includes Debian runtime packages such as the CA certificate bundle. Their notices are retained under `/usr/share/doc/` in the image. The optional media image installs Debian bookworm's `ffmpeg=7:5.1.9-0+deb12u1`; its observed configuration enables GPL components, including libx264. The Go worker invokes FFmpeg as a separate process and does not link its libraries. This does not change the licenses or distribution obligations of FFmpeg and its dependencies.
+The app image includes Debian runtime packages such as the CA certificate bundle. Their notices are retained under `/usr/share/doc/` in the image.
 
-The media image retains Debian copyright files, `/usr/share/folderhug/ffmpeg-build.txt`, and `/usr/share/folderhug/packages.txt`. The base image and FFmpeg version are pinned; other Debian packages are resolved when the image is built. See [MEDIA_WORKER.md](MEDIA_WORKER.md) for its runtime limits and isolation.
+The base image is pinned; additional Debian packages are resolved when the image is built. The release's installed package inventory identifies the exact versions.
 
-The release workflow packages notices and installed package inventories in `folderhug-notices-<version>.tar.gz`, with the matching Debian source packages in `folderhug-debian-sources-<version>.tar.gz`. The release's image manifest records the exact app and worker digests. Checksums cover the Compose files, image manifest, notices, and source archive.
+The release workflow packages notices and the installed package inventory in `folderhug-notices-<version>.tar.gz`, with the matching Debian source packages in `folderhug-debian-sources-<version>.tar.gz`. The release's image manifest records the exact app digest. Checksums cover the Compose file, image manifest, notices, and source archive.
 
 If you redistribute a modified image, preserve its notices and provide the corresponding source and license material required by the packages it contains. The Dockerfile alone is not the corresponding source for Debian's binary packages.

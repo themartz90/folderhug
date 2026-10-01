@@ -21,7 +21,6 @@ import (
 	"github.com/themartz90/folderhug/internal/downloads"
 	"github.com/themartz90/folderhug/internal/events"
 	"github.com/themartz90/folderhug/internal/httpapi"
-	"github.com/themartz90/folderhug/internal/mediabroker"
 	"github.com/themartz90/folderhug/internal/preferences"
 	"github.com/themartz90/folderhug/internal/profiles"
 	"github.com/themartz90/folderhug/internal/scans"
@@ -56,18 +55,12 @@ func run() error {
 	if len(os.Args) > 1 {
 		command = os.Args[1]
 	}
-	if command != "serve" && command != "dev" && command != "setup" && command != "recover" && command != "setup-media" {
-		return fmt.Errorf("usage: folderhug [serve|dev|setup|recover|setup-media|healthcheck]")
+	if command != "serve" && command != "dev" && command != "setup" && command != "recover" {
+		return fmt.Errorf("usage: folderhug [serve|dev|setup|recover|healthcheck]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
-	}
-	if command == "setup-media" {
-		if len(os.Args) != 2 {
-			return fmt.Errorf("setup-media does not accept arguments")
-		}
-		return setupMedia(cfg.WorkerKeyFile)
 	}
 	if command == "dev" {
 		if len(os.Args) != 2 {
@@ -142,23 +135,7 @@ func run() error {
 		return err
 	}
 	defer app.Downloads.Close()
-	var broker *mediabroker.Broker
 	thumbnailConfig := thumbnails.Config{CacheDir: cfg.CacheDir, MaxBytes: cfg.ThumbnailCacheBytes}
-	if cfg.MediaSocket != "" {
-		key, e := readWorkerKey(cfg.WorkerKeyFile)
-		if e != nil {
-			return e
-		}
-		broker, e = mediabroker.New(profileService, owner, app.Catalog, transport, key)
-		if e != nil {
-			return e
-		}
-		if e = broker.Start(cfg.MediaSocket); e != nil {
-			return e
-		}
-		defer broker.Close()
-		thumbnailConfig.Video = broker
-	}
 	app.Thumbnails, err = thumbnails.New(db.DB, profileService, owner, app.Catalog, transport, app.Events, thumbnailConfig)
 	if err != nil {
 		return err
@@ -166,14 +143,7 @@ func run() error {
 	defer app.Thumbnails.Close()
 	app.Preferences = preferences.New(db.DB, profileService, app.Catalog)
 	app.StatusProvider = func(context.Context) (preferences.Status, error) {
-		video := "disabled"
-		if broker != nil {
-			video = "unavailable"
-			if broker.Ready() {
-				video = "ready"
-			}
-		}
-		return preferences.Status{ImageThumbnails: true, VideoWorker: video, CacheMaxBytes: cfg.ThumbnailCacheBytes, StreamMaxBytes: cfg.StreamMaxBytes, ServerDownloads: true, SegmentedDownloads: true}, nil
+		return preferences.Status{ImageThumbnails: true, CacheMaxBytes: cfg.ThumbnailCacheBytes, StreamMaxBytes: cfg.StreamMaxBytes, ServerDownloads: true, SegmentedDownloads: true}, nil
 	}
 	var handler http.Handler = app.Handler(webui.Handler())
 	if command == "dev" {

@@ -78,16 +78,15 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.source_sha }}
           persist-credentials: false
       - run: node scripts/check-public.mjs
-      - name: Pull the tested images and verify source labels
+      - name: Pull the tested image and verify source labels
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
         run: |
           set -euo pipefail
           app="ghcr.io/${GITHUB_REPOSITORY,,}"
-          media="$app-media"
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
-          for image in "$app" "$media"; do
+          for image in "$app"; do
             docker pull --platform linux/amd64 "$image:sha-$SOURCE_SHA"
             test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
             test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
@@ -98,8 +97,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
         run: |
           app="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$SOURCE_SHA"
-          media="ghcr.io/${GITHUB_REPOSITORY,,}-media:sha-$SOURCE_SHA"
-          bash scripts/package-release.sh "$TAG" "$SOURCE_SHA" "$app" "$media" dist
+          bash scripts/package-release.sh "$TAG" "$SOURCE_SHA" "$app" dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: draft-assets
@@ -139,7 +137,7 @@ jobs:
             cd dist
             sha256sum -c "folderhug-checksums-$TAG.txt"
           )
-          printf 'Source commit: %s\nSource archive: https://github.com/%s/archive/%s.tar.gz\n\nThe image manifest records the exact app and media digests used for these assets. The optional media image contains GPL-enabled FFmpeg. Check the attached package source and copyright materials against the built images before publishing this draft.\n' \
+          printf 'Source commit: %s\nSource archive: https://github.com/%s/archive/%s.tar.gz\n\nThe image manifest records the exact app digest used for these assets. Check the attached package source and copyright materials against the built image before publishing this draft.\n' \
             "$SOURCE_SHA" "$GITHUB_REPOSITORY" "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
           release_args=(--draft --verify-tag --title "Folderhug $TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
           if [[ $TAG == *-rc.* ]]; then

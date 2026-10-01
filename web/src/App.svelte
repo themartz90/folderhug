@@ -757,12 +757,11 @@
               <section>
                 <h2>Media and downloads</h2>
                 <p>
-                  Image thumbnails: {status?.image_thumbnails ? 'available' : 'unavailable'}. Video
-                  thumbnails: {status?.video_worker ?? 'unknown'}.
+                  Image thumbnails: {status?.image_thumbnails ? 'available' : 'unavailable'}.
                 </p>
                 <p>
-                  Server downloads: {status?.server_downloads ? 'available' : 'unavailable'}. The
-                  optional video worker provides posters; playback depends on your browser.
+                  Server downloads: {status?.server_downloads ? 'available' : 'unavailable'}.
+                  Audio and video playback depend on your browser.
                 </p>
                 <button class="button secondary" onclick={() => (appearance = true)}
                   >Appearance</button

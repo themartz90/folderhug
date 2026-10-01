@@ -8,7 +8,7 @@ Native development uses port `8080`. Docker Compose publishes host port `48321` 
 
 After building the frontend, run `go run ./cmd/folderhug dev` from the repository root and open `http://localhost:8080`. This command creates its own state in `.local/dev` and signs you in automatically. No setup command or password entry is needed. It accepts only loopback connections and a localhost or loopback public URL. Keep it local; do not expose it through a proxy or tunnel.
 
-Development mode keeps profiles and downloads between restarts. It generates an owner secret and credential key inside `.local/dev/keys`; keep those with the development database. Existing normal app data is separate. The optional video worker is disabled in this mode. Restart the command after signing out or when the 30-day session expires.
+Development mode keeps profiles and downloads between restarts. It generates an owner secret and credential key inside `.local/dev/keys`; keep those with the development database. Existing normal app data is separate. Restart the command after signing out or when the 30-day session expires.
 
 For frontend hot reload, use the two-terminal workflow below, replacing `go run ./cmd/folderhug` with `go run ./cmd/folderhug dev` in the backend terminal.
 

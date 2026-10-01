@@ -1,6 +1,6 @@
 # Compose operations and backups
 
-The core deployment uses one app container and SQLite. The default `compose.yaml` pulls the app image from GHCR. The optional video poster worker is described in [MEDIA_WORKER.md](MEDIA_WORKER.md). These examples use a Linux shell from a directory containing the Compose file.
+The deployment uses one app container and SQLite. The default `compose.yaml` pulls the app image from GHCR. These examples use a Linux shell from a directory containing the Compose file.
 
 ## First start
 
@@ -45,7 +45,7 @@ With no explicit public URL, Folderhug accepts `localhost` and literal IP addres
 
 The native app reads environment variables directly. It does not load a `.env` file. Compose performs its normal variable interpolation, but only variables declared in the Compose service reach the container. Use an override file with `services.app.environment` for additional settings.
 
-Settings use the `FOLDERHUG_` prefix. The app and media worker still accept `HTTPWRAPPER_` settings when the matching new variable is absent. If both are present, `FOLDERHUG_` takes precedence. Update old environment keys in Compose overrides too, since the base file now supplies the new names. The Compose port, public URL, and mounted-root substitutions also accept their old names.
+Settings use the `FOLDERHUG_` prefix. The app still accepts `HTTPWRAPPER_` settings when the matching new variable is absent. If both are present, `FOLDERHUG_` takes precedence. Update old environment keys in Compose overrides too, since the base file now supplies the new names. The Compose port, public URL, and mounted-root substitutions also accept their old names.
 
 The session cookie is `folderhug_session`. The database filename and stored encryption identifiers retain their original names so upgrades can read existing data. Leave those files in place. The `http-wrapper` command remains an alias for `folderhug` in the container, and the old source entry point remains available.
 
@@ -65,8 +65,6 @@ The session cookie is `folderhug_session`. The database filename and stored encr
 | `FOLDERHUG_DOWNLOAD_UNKNOWN_BYTES` | `21474836480` | Reservation for an unknown-length download, 20 GiB |
 | `FOLDERHUG_THUMBNAIL_CACHE_BYTES` | `1073741824` | Thumbnail cache budget, 1 GiB |
 | `FOLDERHUG_UPSTREAM_ALLOW_FILE` | unset | Operator-controlled private-network allow file |
-| `FOLDERHUG_MEDIA_SOCKET` | unset | Optional worker broker socket |
-| `FOLDERHUG_WORKER_KEY` | `.local/worker-key/worker.key` | Separate app-to-worker authentication key |
 
 Compose mounts `/data`, `/keys`, `/downloads`, and `/cache` from named volumes. Directory bind mounts directly under `/mnt` are discovered as server-save destinations at startup without an environment setting. Browser downloads need no host mount. The app needs write access to `/keys` on a fresh installation so it can create `credentials.key`. It runs as UID/GID 10001; keep that ownership when restoring files. A writable host folder used as a mounted download destination also needs access for UID/GID 10001; check its existing permissions before changing ownership or mode.
 
@@ -100,7 +98,7 @@ Stop the app gracefully before upgrading. If a scan was interrupted on an older 
 
 ## Back up a stopped installation
 
-There is no built-in backup command. Stop the app before copying state. Copying only a live SQLite database file can omit committed data in its WAL file. For an installation with the media overlay, stop the worker as well using the same Compose files and project name used at startup.
+There is no built-in backup command. Stop the app before copying state. Copying only a live SQLite database file can omit committed data in its WAL file.
 
 Preserve these items together:
 
@@ -108,11 +106,10 @@ Preserve these items together:
 - The original `credentials.key`, stored in a separately protected backup location.
 - The downloads directory, including partial files, so job records and files agree.
 - The configuration, source revision, and image identity used by that installation.
-- The worker key when retaining an existing media-worker setup. Both app and worker must use the same key.
 
 The thumbnail cache can be recreated. Treat the database and download archives as private: they contain source paths, job history, token records, and downloaded files. Keep the key backup separate from the database backup when your backup system supports separate access controls.
 
-The commands below use the default Compose file. If the media worker is running, stop it with the same `compose.media.yaml` overlay and project name used to start it. Keep the image reference or source revision with the backup record.
+The commands below use the default Compose file. Keep the image reference or source revision with the backup record.
 
 ```sh
 docker compose stop app
@@ -125,7 +122,7 @@ docker compose run --rm --no-deps -T --entrypoint tar app -C /downloads -cpf - .
 docker compose --profile tools run --rm --no-deps -T --entrypoint tar setup -C /keys -cpf - . > "$key_backup/keys.tar"
 ```
 
-Check each command's exit status and inspect all three archives with `tar -tf`. A failed command can leave an empty or incomplete archive. Restart the original core app with `docker compose start app` after the copies finish. For the media overlay, use its full Compose invocation to restart the app and worker.
+Check each command's exit status and inspect all three archives with `tar -tf`. A failed command can leave an empty or incomplete archive. Restart the app with `docker compose start app` after the copies finish.
 
 For a native Windows installation, stop its process and copy the complete configured data, keys, and downloads directories to new protected backup directories. The same consistency and key requirements apply.
 

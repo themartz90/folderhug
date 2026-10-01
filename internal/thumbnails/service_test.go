@@ -266,6 +266,38 @@ func TestNegativeCacheUnsupportedVideoAndDisabledPreviews(t *testing.T) {
 	}
 }
 
+func TestImageOnlyBatchDoesNotFetchVideo(t *testing.T) {
+	f := newThumbnailFixture(t)
+	items, err := f.s.Request(context.Background(), f.p, f.profile.ID, []string{f.entries["video.mp4"].ID, f.entries["photo.jpg"].ID})
+	if err != nil || len(items) != 2 {
+		t.Fatal(items, err)
+	}
+	if items[0].State != "unavailable" || items[1].State != "pending" {
+		t.Fatal("only images should enter the thumbnail queue", items)
+	}
+	ready, file := settled(t, f.s, f.p, items[1].ID)
+	if ready.State != "ready" || file == nil {
+		t.Fatal("image thumbnail did not finish", ready)
+	}
+	_, err = jpeg.Decode(file)
+	file.Close()
+	if err != nil {
+		t.Fatal("image thumbnail is not a JPEG", err)
+	}
+	f.clock.Add(int64(negativeTTL.Seconds()) + 1)
+	video := f.request(t, "video.mp4")
+	if video.State != "unavailable" {
+		t.Fatal("expired video result entered the queue", video)
+	}
+	result, file := settled(t, f.s, f.p, video.ID)
+	if result.State != "unavailable" || file != nil {
+		t.Fatal("video thumbnail returned content", result)
+	}
+	if f.source.count("GET", "/root/video.mp4") != 0 || f.source.count("HEAD", "/root/video.mp4") != 0 {
+		t.Fatal("video thumbnail request fetched upstream metadata or content")
+	}
+}
+
 func TestThumbnailPermissionsCredentialRevisionAndTemporaryLease(t *testing.T) {
 	f := newThumbnailFixture(t)
 	ctx := context.Background()
@@ -396,38 +428,6 @@ func TestRestartClearsOnlyManagedCacheFiles(t *testing.T) {
 	}
 }
 
-type videoFunc func(context.Context, VideoRequest) ([]byte, error)
-
-func (f videoFunc) Generate(ctx context.Context, request VideoRequest) ([]byte, error) {
-	return f(ctx, request)
-}
-
-func TestVideoCallbackAndWorkerOutputValidation(t *testing.T) {
-	f := newThumbnailFixture(t)
-	f.s.Close()
-	var calls atomic.Int64
-	service, err := New(f.db.DB, f.profiles, f.auth, f.catalog, f.source, nil, Config{CacheDir: f.cache, Video: videoFunc(func(ctx context.Context, request VideoRequest) ([]byte, error) {
-		calls.Add(1)
-		if request.ProfileID != f.profile.ID || request.EntryID != f.entries["video.mp4"].ID || request.Generation != f.profile.Generation || request.Principal.CreatorID != f.p.CreatorID {
-			t.Error("invalid broker request")
-		}
-		return syntheticJPEG(t, 1), nil
-	})})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.s = service
-	item := f.request(t, "video.mp4")
-	ready, file := settled(t, f.s, f.p, item.ID)
-	if ready.State != "ready" || calls.Load() != 1 {
-		t.Fatal(ready)
-	}
-	file.Close()
-	if f.source.count("GET", "/root/video.mp4") != 0 {
-		t.Fatal("app directly fetched video bytes")
-	}
-}
-
 func TestBoundedImageQueueAndCredentialCancellation(t *testing.T) {
 	f := newThumbnailFixture(t)
 	ctx := context.Background()
@@ -503,7 +503,7 @@ func TestBoundedImageQueueAndCredentialCancellation(t *testing.T) {
 	}
 }
 
-func TestCompressedInputBudgetAndMalformedVideoOutput(t *testing.T) {
+func TestCompressedInputBudget(t *testing.T) {
 	f := newThumbnailFixture(t)
 	f.source.mu.Lock()
 	f.source.files["/root/large.png"] = testfixture.DeterministicFile(maxInput + 1)
@@ -519,18 +519,5 @@ func TestCompressedInputBudgetAndMalformedVideoOutput(t *testing.T) {
 	result, file := settled(t, f.s, f.p, item.ID)
 	if result.State != "unavailable" || file != nil {
 		t.Fatal("oversized compressed image accepted", result)
-	}
-	f.s.Close()
-	s, err := New(f.db.DB, f.profiles, f.auth, f.catalog, f.source, nil, Config{CacheDir: f.cache, Video: videoFunc(func(context.Context, VideoRequest) ([]byte, error) {
-		return []byte("<svg>worker output must not execute</svg>"), nil
-	})})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.s = s
-	item = f.request(t, "video.mp4")
-	result, file = settled(t, s, f.p, item.ID)
-	if result.State != "unavailable" || file != nil {
-		t.Fatal("malformed worker output accepted", result)
 	}
 }

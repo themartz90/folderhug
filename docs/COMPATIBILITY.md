@@ -26,8 +26,8 @@ Partial downloads are not published as completed files. After a restart, interru
 
 ## Previews and deployment
 
-Image thumbnails accept JPEG, PNG, and GIF input. They use the first GIF frame and apply JPEG orientation metadata. Input and decoded-image limits can make a large image unavailable; the file remains downloadable. WebP thumbnail decoding is not included. Video posters require the optional isolated FFmpeg worker. Its byte and time limits mean that some valid videos have no poster.
+Image thumbnails accept JPEG, PNG, and GIF input. They use the first GIF frame and apply JPEG orientation metadata. Compressed input is limited to 16 MiB, decoded images to 16 million pixels, and raster memory to 64 MiB. Those limits can make a large image unavailable; the file remains downloadable. WebP thumbnail decoding is not included.
 
-Playback depends on the browser, container, and codecs. A poster is not proof that the browser can play the video. The media view handles playback errors and a load timeout and keeps a browser-download action available. The app does not transcode media. See [media worker](MEDIA_WORKER.md) for setup and limits.
+Audio and video playback depends on the browser, container, and codecs. The media view handles playback errors and a load timeout and keeps a browser-download action available. The app does not transcode media.
 
 Native development uses Windows 11. Deployment uses the supplied Linux Compose files. ARM64 and other targets have not been verified. The app has one owner account, scoped API tokens, and one SQLite database. It does not provide multiple users, public sharing, uploads, upstream rename/delete, or horizontal scaling.

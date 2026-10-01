@@ -1,7 +1,6 @@
 package appcli
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/themartz90/folderhug/internal/config"
@@ -31,9 +30,9 @@ func TestMergeDownloadMountsKeepsLegacyIdentity(t *testing.T) {
 }
 
 func TestProtectedMountPaths(t *testing.T) {
-	cfg := config.Config{DataDir: "/data", KeysDir: "/keys", DownloadsDir: "/downloads", CacheDir: "/cache", WorkerKeyFile: "/worker-key/worker.key", MediaSocket: "/broker/broker.sock"}
+	cfg := config.Config{DataDir: "/data", KeysDir: "/keys", DownloadsDir: "/downloads", CacheDir: "/cache"}
 	got := mountProtectedPaths(cfg)
-	want := []string{"/data", "/keys", "/downloads", "/cache", filepath.Dir(cfg.WorkerKeyFile), filepath.Dir(cfg.MediaSocket)}
+	want := []string{"/data", "/keys", "/downloads", "/cache"}
 	if len(got) != len(want) {
 		t.Fatal(got)
 	}

@@ -14,7 +14,7 @@ const privateValues = existsSync('.env') ? readFileSync('.env', 'utf8').split(/\
 const allowedRoots = new Set(['.github', 'api', 'cmd', 'docs', 'examples', 'internal', 'scripts', 'tests', 'web']);
 const allowedFiles = new Set(['.dockerignore', '.gitattributes', '.gitignore', '.node-version',
   'CONTRIBUTING.md', 'Dockerfile', 'LICENSE', 'README.md', 'SECURITY.md', 'go.mod', 'go.sum',
-  'compose.yaml', 'compose.media.yaml', 'compose.build.yaml', 'compose.media.build.yaml']);
+  'compose.yaml', 'compose.build.yaml']);
 
 for (const file of files) {
   if ((!file.includes('/') && !allowedFiles.has(file)) ||
@@ -37,7 +37,7 @@ for (const file of files) {
   if (/\u2014/.test(text)) failures.push(`${file}: em dash in public documentation`);
   if (/\.local\/|private\/project|SSH_STAGING_SERVER|C8_REVIEW_REPORT|EXECUTION_PLAN\.md/.test(text)) {
     // Allow documented native development directories.
-    const withoutDefaults = text.replace(/\.local\/(?:dev|data|keys|downloads|cache|worker-key)(?:\b|\/)/g, '');
+    const withoutDefaults = text.replace(/\.local\/(?:dev|data|keys|downloads|cache)(?:\b|\/)/g, '');
     if (/\.local\/|private\/project|SSH_STAGING_SERVER|C8_REVIEW_REPORT|EXECUTION_PLAN\.md/.test(withoutDefaults)) {
       failures.push(`${file}: internal documentation reference`);
     }

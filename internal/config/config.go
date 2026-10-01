@@ -32,8 +32,6 @@ type Config struct {
 	DownloadReserveBytes int64
 	DownloadUnknownBytes int64
 	ThumbnailCacheBytes  int64
-	MediaSocket          string
-	WorkerKeyFile        string
 }
 
 func Load() (Config, error) {
@@ -91,7 +89,6 @@ func Load() (Config, error) {
 	}
 	return Config{
 		DownloadBudgetBytes: limits["DOWNLOAD_BUDGET_BYTES"], DownloadReserveBytes: limits["DOWNLOAD_RESERVE_BYTES"], DownloadUnknownBytes: limits["DOWNLOAD_UNKNOWN_BYTES"], ThumbnailCacheBytes: limits["THUMBNAIL_CACHE_BYTES"],
-		MediaSocket: Env("MEDIA_SOCKET"), WorkerKeyFile: Value("WORKER_KEY", filepath.Join(base, "worker-key", "worker.key")),
 		Address: Value("ADDR", address), PublicURL: u,
 		DataDir:        Value("DATA_DIR", filepath.Join(base, "data")),
 		KeysDir:        Value("KEYS_DIR", filepath.Join(base, "keys")),

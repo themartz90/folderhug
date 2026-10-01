@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
-	"path/filepath"
 
 	"github.com/themartz90/folderhug/internal/config"
 	"github.com/themartz90/folderhug/internal/downloadfs"
@@ -13,14 +12,7 @@ import (
 )
 
 func mountProtectedPaths(cfg config.Config) []string {
-	paths := []string{cfg.DataDir, cfg.KeysDir, cfg.DownloadsDir, cfg.CacheDir}
-	if cfg.WorkerKeyFile != "" {
-		paths = append(paths, filepath.Dir(cfg.WorkerKeyFile))
-	}
-	if cfg.MediaSocket != "" {
-		paths = append(paths, filepath.Dir(cfg.MediaSocket))
-	}
-	return paths
+	return []string{cfg.DataDir, cfg.KeysDir, cfg.DownloadsDir, cfg.CacheDir}
 }
 
 func autoMountID(path string) string {

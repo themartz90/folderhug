@@ -4,7 +4,7 @@
 
 Folderhug is a self-hosted file explorer for HTTP directory listings, such as a seedbox's download folder. Add your sources, browse and search their folders, preview supported media, and download files to your browser or server. Folderhug leaves the source files unchanged.
 
-You can switch between list and grid views, filter a folder, pin folders, and use Find files to search subfolders. Folderhug has one owner account. Image thumbnails work in the app; video posters need the optional media worker. Playback depends on your browser and the file's codec.
+You can switch between list and grid views, filter a folder, pin folders, and use Find files to search subfolders. Folderhug has one owner account. Image thumbnails work in the app. Audio and video playback depends on your browser and the file's codec.
 
 ## Screenshots
 

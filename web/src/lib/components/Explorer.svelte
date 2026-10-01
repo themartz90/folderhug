@@ -297,7 +297,7 @@
     const items = visible
       .filter(
         (entry) =>
-          ['image', 'video'].includes(entry.category) &&
+          entry.category === 'image' &&
           (!thumbnailStates[entry.id] || thumbnailStates[entry.id]?.state === 'pending'),
       )
       .slice(0, 32);

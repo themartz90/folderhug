@@ -18,7 +18,7 @@ func preferencesHTTPFixture(t *testing.T) (*authFixture, *http.Cookie, auth.Sess
 	f, _, cookie, session, profile := newBrowseFixture(t)
 	f.server.Preferences = preferences.New(f.server.Store.DB, f.server.Profiles, f.server.Catalog)
 	f.server.StatusProvider = func(context.Context) (preferences.Status, error) {
-		return preferences.Status{ImageThumbnails: true, VideoWorker: "disabled", CacheMaxBytes: 1 << 30, StreamMaxBytes: 1 << 40, ServerDownloads: true, SegmentedDownloads: true}, nil
+		return preferences.Status{ImageThumbnails: true, CacheMaxBytes: 1 << 30, StreamMaxBytes: 1 << 40, ServerDownloads: true, SegmentedDownloads: true}, nil
 	}
 	f.handler = f.server.Handler(http.NotFoundHandler())
 	return f, cookie, session, profile
@@ -186,29 +186,27 @@ func TestPreferencesBookmarksAndStatusAreOwnerOnly(t *testing.T) {
 
 func TestStatusCapabilitiesAndFailureDoNotRevealPrivateConfiguration(t *testing.T) {
 	f, cookie, _, _ := preferencesHTTPFixture(t)
-	for _, worker := range []string{"disabled", "ready", "unavailable"} {
-		f.server.StatusProvider = func(context.Context) (preferences.Status, error) {
-			return preferences.Status{ImageThumbnails: true, VideoWorker: worker, CacheMaxBytes: 1073741824, StreamMaxBytes: 1099511627776, ServerDownloads: true, SegmentedDownloads: true}, nil
-		}
-		w := f.request("GET", "/api/v1/status", "", cookie, "", nil)
-		requireStatus(t, w, 200)
-		var payload map[string]any
-		if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
-			t.Fatal(err)
-		}
-		if len(payload) != 6 || payload["video_worker"] != worker || payload["image_thumbnails"] != true {
-			t.Fatal(payload)
-		}
-		for _, private := range []string{"root_url", "password", "username", "data_dir", "downloads_dir", "cache_dir", "files.example.test", "private-fixture"} {
-			if strings.Contains(w.Body.String(), private) {
-				t.Fatal("status exposed private configuration")
-			}
+	f.server.StatusProvider = func(context.Context) (preferences.Status, error) {
+		return preferences.Status{ImageThumbnails: true, CacheMaxBytes: 1073741824, StreamMaxBytes: 1099511627776, ServerDownloads: true, SegmentedDownloads: true}, nil
+	}
+	w := f.request("GET", "/api/v1/status", "", cookie, "", nil)
+	requireStatus(t, w, 200)
+	var payload map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != 5 || payload["video_worker"] != nil || payload["image_thumbnails"] != true {
+		t.Fatal(payload)
+	}
+	for _, private := range []string{"root_url", "password", "username", "data_dir", "downloads_dir", "cache_dir", "files.example.test", "private-fixture"} {
+		if strings.Contains(w.Body.String(), private) {
+			t.Fatal("status exposed private configuration")
 		}
 	}
 	f.server.StatusProvider = func(context.Context) (preferences.Status, error) {
 		return preferences.Status{}, errors.New("private error C:/private/path and private-password")
 	}
-	w := f.request("GET", "/api/v1/status", "", cookie, "", nil)
+	w = f.request("GET", "/api/v1/status", "", cookie, "", nil)
 	requireStatus(t, w, 503)
 	if strings.Contains(w.Body.String(), "private-") || strings.Contains(w.Body.String(), "C:/") {
 		t.Fatal("provider failure leaked details")

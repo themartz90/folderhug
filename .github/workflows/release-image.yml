@@ -62,7 +62,6 @@ jobs:
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$asset_dir"
           for name in \
             "folderhug-compose-$TAG.yaml" \
-            "folderhug-media-$TAG.yaml" \
             "folderhug-images-$TAG.json" \
             "folderhug-notices-$TAG.tar.gz" \
             "folderhug-debian-sources-$TAG.tar.gz" \
@@ -75,26 +74,22 @@ jobs:
           )
           manifest="$asset_dir/folderhug-images-$TAG.json"
           jq -e --arg tag "$TAG" --arg sha "$SOURCE_SHA" \
-            '.schema_version == 1 and .version_tag == $tag and .source_sha == $sha' "$manifest"
+            '.schema_version == 1 and .version_tag == $tag and .source_sha == $sha and
+             (keys == ["app_image", "schema_version", "source_sha", "version_tag"])' "$manifest"
           app_ref=$(jq -r .app_image "$manifest")
-          media_ref=$(jq -r .media_image "$manifest")
           [[ $app_ref == "ghcr.io/${GITHUB_REPOSITORY,,}@sha256:"* ]]
-          [[ $media_ref == "ghcr.io/${GITHUB_REPOSITORY,,}-media@sha256:"* ]]
           [[ ${app_ref##*@sha256:} =~ ^[a-f0-9]{64}$ ]]
-          [[ ${media_ref##*@sha256:} =~ ^[a-f0-9]{64}$ ]]
           echo "app_ref=$app_ref" >> "$GITHUB_OUTPUT"
-          echo "media_ref=$media_ref" >> "$GITHUB_OUTPUT"
-      - name: Pull and verify both tested images
+      - name: Pull and verify the tested image
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
           APP_REF: ${{ steps.assets.outputs.app_ref }}
-          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
         run: |
           set -euo pipefail
           repo_visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
-          for package in folderhug folderhug-media; do
+          for package in folderhug; do
             package_visibility=$(gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/$package" --jq .visibility)
             if [[ $repo_visibility == public && $package_visibility != public ]]; then
               echo "Public release requires public pull access for $package. Change package visibility yourself before publication." >&2
@@ -105,21 +100,19 @@ jobs:
               exit 1
             fi
           done
-          for ref in "$APP_REF" "$MEDIA_REF"; do
+          for ref in "$APP_REF"; do
             docker pull --platform linux/amd64 "$ref"
             test "$(docker image inspect "$ref" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
             test "$(docker image inspect "$ref" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
           done
-      - name: Push both version images
+      - name: Push the version image
         env:
           TAG: ${{ github.event.release.tag_name }}
           APP_REF: ${{ steps.assets.outputs.app_ref }}
-          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
         run: |
           set -euo pipefail
           app="ghcr.io/${GITHUB_REPOSITORY,,}"
-          media="$app-media"
-          for pair in "$APP_REF $app" "$MEDIA_REF $media"; do
+          for pair in "$APP_REF $app"; do
             read -r ref image <<< "$pair"
             docker tag "$ref" "$image:$TAG"
             docker push "$image:$TAG"
@@ -133,7 +126,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
           APP_REF: ${{ steps.assets.outputs.app_ref }}
-          MEDIA_REF: ${{ steps.assets.outputs.media_ref }}
         run: |
           set -euo pipefail
           latest_tag=''
@@ -156,10 +148,9 @@ jobs:
             exit 0
           fi
           app="ghcr.io/${GITHUB_REPOSITORY,,}"
-          media="$app-media"
-          for pair in "$APP_REF $app" "$MEDIA_REF $media"; do
+          for pair in "$APP_REF $app"; do
             read -r ref image <<< "$pair"
             docker tag "$ref" "$image:latest"
             docker push "$image:latest"
           done
-          echo "Updated both latest image tags for $TAG." >> "$GITHUB_STEP_SUMMARY"
+          echo "Updated the latest image tag for $TAG." >> "$GITHUB_STEP_SUMMARY"

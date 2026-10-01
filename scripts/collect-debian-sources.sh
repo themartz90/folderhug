@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-app_image=${1:?usage: collect-debian-sources.sh APP_IMAGE MEDIA_IMAGE OUTPUT_DIR}
-media_image=${2:?usage: collect-debian-sources.sh APP_IMAGE MEDIA_IMAGE OUTPUT_DIR}
-output_dir=${3:?usage: collect-debian-sources.sh APP_IMAGE MEDIA_IMAGE OUTPUT_DIR}
+app_image=${1:?usage: collect-debian-sources.sh APP_IMAGE OUTPUT_DIR}
+output_dir=${2:?usage: collect-debian-sources.sh APP_IMAGE OUTPUT_DIR}
 
 if [[ -e $output_dir ]]; then
   echo 'Debian source output directory already exists.' >&2
@@ -14,8 +13,6 @@ mkdir -p "$output_dir/sources"
 query_format='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n'
 docker run --rm --network none --entrypoint dpkg-query "$app_image" \
   -W -f="$query_format" > "$output_dir/app-packages.tsv"
-docker run --rm --network none --entrypoint dpkg-query "$media_image" \
-  -W -f="$query_format" > "$output_dir/media-packages.tsv"
 
 python3 - "$output_dir" <<'PY'
 import pathlib
@@ -24,19 +21,18 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 sources = set()
-for image in ("app", "media"):
-    for line in (root / f"{image}-packages.tsv").read_text().splitlines():
-        parts = line.split("\t")
-        if len(parts) != 4:
-            raise SystemExit(f"Invalid package inventory for {image}")
-        binary, binary_version, source, source_version = parts
-        if not binary or not binary_version or not source or not source_version:
-            raise SystemExit(f"Missing source identity for {binary or image}")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", source):
-            raise SystemExit(f"Unexpected Debian source name: {source}")
-        if not re.fullmatch(r"[A-Za-z0-9.+:~_-]+", source_version):
-            raise SystemExit(f"Unexpected Debian source version: {source_version}")
-        sources.add((source, source_version))
+for line in (root / "app-packages.tsv").read_text().splitlines():
+    parts = line.split("\t")
+    if len(parts) != 4:
+        raise SystemExit("Invalid app package inventory")
+    binary, binary_version, source, source_version = parts
+    if not binary or not binary_version or not source or not source_version:
+        raise SystemExit(f"Missing source identity for {binary or 'app'}")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", source):
+        raise SystemExit(f"Unexpected Debian source name: {source}")
+    if not re.fullmatch(r"[A-Za-z0-9.+:~_-]+", source_version):
+        raise SystemExit(f"Unexpected Debian source version: {source_version}")
+    sources.add((source, source_version))
 (root / "source-packages.tsv").write_text(
     "".join(f"{name}\t{version}\n" for name, version in sorted(sources))
 )

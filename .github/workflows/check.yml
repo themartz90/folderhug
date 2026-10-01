@@ -90,9 +90,7 @@ jobs:
         with:
           persist-credentials: false
       - run: docker compose -f compose.yaml config --quiet
-      - run: docker compose -f compose.yaml -f compose.media.yaml --profile media config --quiet
       - run: docker compose -f compose.yaml -f compose.build.yaml config --quiet
-      - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media config --quiet
       - name: Check Compose setting compatibility
         shell: bash
         run: |
@@ -109,13 +107,5 @@ jobs:
               .services.app.environment.FOLDERHUG_PUBLIC_URL == "http://localhost:18081" and
               .services.app.environment.FOLDERHUG_MOUNTED_ROOTS == "[]"'
       - run: docker compose -f compose.yaml -f compose.build.yaml build app
-      - run: docker compose -f compose.yaml -f compose.media.yaml -f compose.build.yaml -f compose.media.build.yaml --profile media build media
       - run: docker build --platform linux/amd64 --target app -t folderhug:ci .
       - run: bash scripts/ci-container-smoke.sh folderhug:ci
-      - run: docker build --platform linux/amd64 --target media-test -t folderhug:media-test-ci .
-      - run: >-
-          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m,mode=1777
-          -e MEDIAWORKER_FFMPEG_INTEGRATION=1 -e MEDIAWORKER_FIXTURE_DIR=/tmp/fixtures
-          --entrypoint sh folderhug:media-test-ci -c
-          'sh /usr/local/bin/generate-media-fixtures /tmp/fixtures &&
-          /usr/local/bin/mediaworker.test -test.v && /usr/local/bin/mediabroker.test && /usr/local/bin/thumbnails.test'

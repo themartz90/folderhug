@@ -81,12 +81,11 @@ type Bookmark struct {
 }
 
 type Status struct {
-	ImageThumbnails    bool   `json:"image_thumbnails"`
-	VideoWorker        string `json:"video_worker"`
-	CacheMaxBytes      int64  `json:"cache_max_bytes"`
-	StreamMaxBytes     int64  `json:"stream_max_bytes"`
-	ServerDownloads    bool   `json:"server_downloads"`
-	SegmentedDownloads bool   `json:"segmented_downloads"`
+	ImageThumbnails    bool  `json:"image_thumbnails"`
+	CacheMaxBytes      int64 `json:"cache_max_bytes"`
+	StreamMaxBytes     int64 `json:"stream_max_bytes"`
+	ServerDownloads    bool  `json:"server_downloads"`
+	SegmentedDownloads bool  `json:"segmented_downloads"`
 }
 
 type StatusProvider func(context.Context) (Status, error)

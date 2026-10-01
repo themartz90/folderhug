@@ -86,27 +86,24 @@ func TestFolderhugSettingsTakePrecedenceOverLegacySettings(t *testing.T) {
 	t.Setenv("FOLDERHUG_DATA_DIR", "folderhug-data")
 	t.Setenv("HTTPWRAPPER_DOWNLOAD_BUDGET_BYTES", "12345")
 	t.Setenv("FOLDERHUG_DOWNLOAD_BUDGET_BYTES", "54321")
-	t.Setenv("HTTPWRAPPER_MEDIA_SOCKET", "old.sock")
-	t.Setenv("FOLDERHUG_MEDIA_SOCKET", "folderhug.sock")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PublicURL.String() != "https://folderhug.example.test" || cfg.DataDir != "folderhug-data" || cfg.DownloadBudgetBytes != 54321 || cfg.MediaSocket != "folderhug.sock" {
+	if cfg.PublicURL.String() != "https://folderhug.example.test" || cfg.DataDir != "folderhug-data" || cfg.DownloadBudgetBytes != 54321 {
 		t.Fatalf("Folderhug settings did not take precedence: %+v", cfg)
 	}
 	t.Setenv("FOLDERHUG_PUBLIC_URL", "")
 	t.Setenv("FOLDERHUG_DATA_DIR", "")
 	t.Setenv("FOLDERHUG_DOWNLOAD_BUDGET_BYTES", "")
-	t.Setenv("FOLDERHUG_MEDIA_SOCKET", "")
 	cfg, err = Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PublicURL != nil || cfg.DataDir != filepath.Join(".local", "data") || cfg.DownloadBudgetBytes != 107374182400 || cfg.MediaSocket != "" {
+	if cfg.PublicURL != nil || cfg.DataDir != filepath.Join(".local", "data") || cfg.DownloadBudgetBytes != 107374182400 {
 		t.Fatalf("empty Folderhug settings fell back to legacy values: %+v", cfg)
 	}
-	for _, key := range []string{"FOLDERHUG_PUBLIC_URL", "FOLDERHUG_DATA_DIR", "FOLDERHUG_DOWNLOAD_BUDGET_BYTES", "FOLDERHUG_MEDIA_SOCKET"} {
+	for _, key := range []string{"FOLDERHUG_PUBLIC_URL", "FOLDERHUG_DATA_DIR", "FOLDERHUG_DOWNLOAD_BUDGET_BYTES"} {
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +112,7 @@ func TestFolderhugSettingsTakePrecedenceOverLegacySettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PublicURL.String() != "https://old.example.test" || cfg.DataDir != "old-data" || cfg.DownloadBudgetBytes != 12345 || cfg.MediaSocket != "old.sock" {
+	if cfg.PublicURL.String() != "https://old.example.test" || cfg.DataDir != "old-data" || cfg.DownloadBudgetBytes != 12345 {
 		t.Fatalf("legacy settings stopped working: %+v", cfg)
 	}
 }

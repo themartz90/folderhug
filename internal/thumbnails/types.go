@@ -7,7 +7,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/themartz90/folderhug/internal/auth"
 	"github.com/themartz90/folderhug/internal/upstream"
 )
 
@@ -23,23 +22,9 @@ type Fetcher interface {
 	Do(context.Context, *upstream.Root, string, string, upstream.Options) (*http.Response, error)
 }
 
-type VideoRequest struct {
-	ProfileID  string
-	EntryID    string
-	Generation int
-	Principal  auth.Principal
-}
-
-// VideoGenerator returns a JPEG from the isolated broker, never source credentials.
-// Implementations must stop on context cancellation.
-type VideoGenerator interface {
-	Generate(context.Context, VideoRequest) ([]byte, error)
-}
-
 type Config struct {
 	CacheDir string
 	MaxBytes int64
-	Video    VideoGenerator
 }
 
 type Thumbnail struct {

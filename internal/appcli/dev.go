@@ -36,7 +36,6 @@ func configureDev(cfg *config.Config) error {
 	cfg.KeysDir = filepath.Join(".local", "dev", "keys")
 	cfg.DownloadsDir = filepath.Join(".local", "dev", "downloads")
 	cfg.CacheDir = filepath.Join(".local", "dev", "cache")
-	cfg.MediaSocket = ""
 	return nil
 }
 
