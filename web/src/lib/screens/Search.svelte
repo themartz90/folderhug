@@ -93,8 +93,8 @@
     } finally { if (!request.signal.aborted) loading = false; }
   }
   function search() { cursor = ''; previous = []; selected = []; appliedQuery = query.trim(); onfilters([...types], query); void load(); }
-  function forward() { if (!next) return; previous = [...previous, cursor]; cursor = next; selected = []; void load(); }
-  function back() { cursor = previous.at(-1) ?? ''; previous = previous.slice(0, -1); selected = []; void load(); }
+  function forward() { if (loading || !next) return; previous = [...previous, cursor]; cursor = next; selected = []; void load(); }
+  function back() { if (loading || !previous.length) return; cursor = previous.at(-1) ?? ''; previous = previous.slice(0, -1); selected = []; void load(); }
   async function cancel() {
     if (!find) return;
     try { await api(`/scans/${idPath(find.id)}/cancel`, { method: 'POST' }); onrefresh(); }
@@ -122,7 +122,7 @@
     {#if scan}
       <div class="activity-coverage" role="status">
         <strong>{scan.state === 'running' || scan.state === 'queued' ? 'Finding files…' : scan.state === 'completed' ? 'Finished finding files' : scan.state === 'cancelled' ? 'Stopped finding files' : 'File search stopped'}</strong>
-        <p>{scan.directories_visited.toLocaleString()} folders checked · {scan.files_found.toLocaleString()} files found</p>
+        <p>{scan.directories_visited.toLocaleString()} folder{scan.directories_visited === 1 ? '' : 's'} checked · {scan.files_found.toLocaleString()} file{scan.files_found === 1 ? '' : 's'} found</p>
         {#if scan.error}<p>{scan.error.message}</p>{/if}
         {#if scan.state === 'running' || scan.state === 'queued'}<p>Results update as files are found.</p>{:else if scan.state !== 'completed' || scan.coverage.state !== 'complete'}<p>Results may be incomplete. Files already found remain available.</p>{/if}
         {#if ['running', 'queued'].includes(scan.state)}
@@ -172,9 +172,9 @@
       </div>
     {/if}
     <nav class="activity-pagination" aria-label="Result pages">
-      <button class="button secondary" disabled={!previous.length} onclick={back}>Previous page</button>
-      <span>Page {previous.length + 1} · {entries.length} results</span>
-      <button class="button secondary" disabled={!next} onclick={forward}>Next page</button>
+      <button class="button secondary" disabled={loading || !previous.length} onclick={back}>Previous page</button>
+      <span>Page {previous.length + 1} · {entries.length} result{entries.length === 1 ? '' : 's'}</span>
+      <button class="button secondary" disabled={loading || !next} onclick={forward}>Next page</button>
     </nav>
     {#if coverage.some((item) => item.state === 'stale')}<p class="activity-note">The source may have changed since these files were found.</p>{/if}
   {/if}

@@ -312,8 +312,8 @@
         >
       </details>
       <p class="field-help">
-        Up to {directOnly ? 0 : depth} folder levels, {maxEntries.toLocaleString()} entries, and {seconds}
-        seconds. Results remain available if a limit is reached.
+        Up to {directOnly ? 0 : depth} folder level{!directOnly && depth === 1 ? '' : 's'}, {maxEntries?.toLocaleString() ?? '…'} {maxEntries === 1 ? 'entry' : 'entries'}, and {seconds}
+        second{seconds === 1 ? '' : 's'}. Results remain available if a limit is reached.
       </p>
     {:else}
       <ul class="transfer-files">
@@ -326,7 +326,7 @@
           </li>{/each}
       </ul>
       {#if entries.length > 20}<p class="field-help">
-          And {entries.length - 20} more selected files.
+          And {entries.length - 20} more selected file{entries.length === 21 ? '' : 's'}.
         </p>{/if}
       {#if entries.some((entry) => entry.kind === 'directory')}<p class="error-banner">
           Folders need a scan and a review of the indexed files first. Close this dialog and choose

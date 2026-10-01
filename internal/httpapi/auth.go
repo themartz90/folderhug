@@ -283,13 +283,18 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 		if !decode(w, r, &input) {
 			return
 		}
-		for _, id := range input.ProfileIDs {
-			if _, err := s.Profiles.Get(r.Context(), id, profiles.LeaseID(p)); err != nil {
-				s.failure(w, r, err)
-				return
+		var token auth.Token
+		var raw string
+		err := s.Auth.WithLivePrincipal(r.Context(), p, func(current auth.Principal) error {
+			for _, id := range input.ProfileIDs {
+				if _, err := s.Profiles.Get(r.Context(), id, profiles.LeaseID(current)); err != nil {
+					return err
+				}
 			}
-		}
-		token, raw, err := s.Auth.CreateToken(r.Context(), input)
+			var err error
+			token, raw, err = s.Auth.CreateToken(r.Context(), input)
+			return err
+		})
 		if err != nil {
 			s.failure(w, r, err)
 			return

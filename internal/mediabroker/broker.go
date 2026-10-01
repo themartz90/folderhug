@@ -32,16 +32,17 @@ const byteBudget int64 = 32 << 20
 const jobTimeout = 15 * time.Second
 
 type Broker struct {
-	profiles  *profiles.Service
-	auth      *auth.Service
-	catalog   *catalog.Service
-	fetcher   catalog.Fetcher
-	key       string
-	mu        sync.Mutex
-	active    *lease
-	server    *http.Server
-	listener  net.Listener
-	lastClaim time.Time
+	profiles        *profiles.Service
+	auth            *auth.Service
+	catalog         *catalog.Service
+	fetcher         catalog.Fetcher
+	key             string
+	mu              sync.Mutex
+	active          *lease
+	server          *http.Server
+	listener        net.Listener
+	lastClaim       time.Time
+	resultUploading bool
 }
 type lease struct {
 	id, token            string
@@ -258,6 +259,25 @@ func (b *Broker) result(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
 		return
 	}
+	b.mu.Lock()
+	if b.active != j || j.used || j.ctx.Err() != nil {
+		b.mu.Unlock()
+		w.WriteHeader(401)
+		return
+	}
+	// Limit result buffering across leases, including an expired upload still reading.
+	if b.resultUploading {
+		b.mu.Unlock()
+		w.WriteHeader(429)
+		return
+	}
+	b.resultUploading = true
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		b.resultUploading = false
+		b.mu.Unlock()
+	}()
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
 	defer controller.SetReadDeadline(time.Time{})

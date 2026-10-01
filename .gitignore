@@ -10,6 +10,7 @@
 /compose.override.yml
 
 # Runtime files
+/.folderhug-ci.*/
 /data/
 /downloads/
 /cache/

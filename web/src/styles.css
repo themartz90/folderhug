@@ -2192,9 +2192,8 @@ legend {
   .primary-nav button,
   .file-card,
   .profile-card {
-    transition:
-      background-color 120ms,
-      border-color 120ms;
+    /* Theme foreground and background colors must change together for contrast. */
+    transition: border-color 120ms;
   }
 }
 .app .app-shell {

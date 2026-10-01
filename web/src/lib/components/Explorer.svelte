@@ -396,7 +396,7 @@
     </div>
     <p>
       {page
-        ? `${page.total_entries.toLocaleString()} items`
+        ? `${page.total_entries.toLocaleString()} item${page.total_entries === 1 ? '' : 's'}`
         : 'HTTP folder'}{profile.credential_state === 'temporary' ? ' · Temporary password' : ''}
     </p>
   </div>
@@ -561,7 +561,7 @@
         })}
       onselectall={() => {
         selected = Object.fromEntries(entries.map((entry) => [entry.id, entry]));
-        onnotice(`${entries.length} loaded items selected.`);
+        onnotice(`${entries.length} loaded item${entries.length === 1 ? '' : 's'} selected.`);
       }}
       onclear={() => (selected = {})}
       onup={() => {

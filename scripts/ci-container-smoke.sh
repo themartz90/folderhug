@@ -2,7 +2,8 @@
 set -euo pipefail
 
 image=${1:?usage: ci-container-smoke.sh IMAGE}
-state_dir=$(mktemp -d)
+# The mount fixture needs disk storage, since tmpfs is not a save destination.
+state_dir=$(mktemp -d "$PWD/.folderhug-ci.XXXXXX")
 mount_dir="$state_dir/mount"
 parent_dir="$state_dir/parent"
 readonly_dir="$state_dir/readonly"

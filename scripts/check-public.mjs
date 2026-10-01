@@ -36,7 +36,7 @@ for (const file of files) {
   if (!file.endsWith('.md')) continue;
   if (/\u2014/.test(text)) failures.push(`${file}: em dash in public documentation`);
   if (/\.local\/|private\/project|SSH_STAGING_SERVER|C8_REVIEW_REPORT|EXECUTION_PLAN\.md/.test(text)) {
-    // Native development paths are public defaults, not private evidence.
+    // Allow documented native development directories.
     const withoutDefaults = text.replace(/\.local\/(?:dev|data|keys|downloads|cache|worker-key)(?:\b|\/)/g, '');
     if (/\.local\/|private\/project|SSH_STAGING_SERVER|C8_REVIEW_REPORT|EXECUTION_PLAN\.md/.test(withoutDefaults)) {
       failures.push(`${file}: internal documentation reference`);

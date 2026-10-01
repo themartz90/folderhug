@@ -173,11 +173,13 @@
     const id = find?.id;
     void revision;
     if (!authenticated || !id) return;
-    void api<Scan>(`/scans/${idPath(id)}`).then((scan) => {
-      if (find?.id === id) { findScan = scan; findMissing = false; }
+    const controller = new AbortController();
+    void api<Scan>(`/scans/${idPath(id)}`, { signal: controller.signal }).then((scan) => {
+      if (!controller.signal.aborted && find?.id === id) { findScan = scan; findMissing = false; }
     }).catch((error) => {
-      if (find?.id === id && error instanceof ApiError && error.status === 404) { findScan = null; findMissing = true; }
+      if (!controller.signal.aborted && find?.id === id && error instanceof ApiError && error.status === 404) { findScan = null; findMissing = true; }
     });
+    return () => controller.abort();
   });
   $effect(() => {
     void findScope;

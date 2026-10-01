@@ -554,7 +554,7 @@ func (s *Service) Refresh(ctx context.Context, principal Principal) (Principal, 
 	return p, nil
 }
 
-// WithLivePrincipal serializes credential installation with principal revocation.
+// WithLivePrincipal rechecks authority and serializes its callback with revocation.
 // The callback must not call a revocation method or wait for network input.
 func (s *Service) WithLivePrincipal(ctx context.Context, p Principal, install func(Principal) error) error {
 	s.authority.RLock()

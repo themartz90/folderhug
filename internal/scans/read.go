@@ -153,6 +153,10 @@ func (s *Service) List(ctx context.Context, p auth.Principal, profileID string, 
 	if err != nil {
 		return ScanPage{}, err
 	}
+	generations := make(map[string]int, len(visible))
+	for _, profile := range visible {
+		generations[profile.ID] = profile.Generation
+	}
 	where, args := profileWhere(visible, "")
 	if len(visible) > 0 {
 		clauses := []string{}
@@ -183,6 +187,9 @@ func (s *Service) List(ctx context.Context, p auth.Principal, profileID string, 
 		if err != nil {
 			rows.Close()
 			return result, err
+		}
+		if generations[j.ProfileID] != j.Generation {
+			j.Coverage.State = "stale"
 		}
 		result.Scans = append(result.Scans, j.Scan)
 	}
@@ -277,8 +284,8 @@ func (s *Service) Search(ctx context.Context, p auth.Principal, q SearchQuery) (
 		args = append(args, rootPath, rootPath)
 	}
 	if q.DirectOnly {
-		where += " AND instr(substr(i.path_key,length(?)+1),'/')=0"
-		args = append(args, rootPath)
+		where += " AND i.path_key<>? AND instr(rtrim(substr(i.path_key,length(?)+1),'/'),'/')=0"
+		args = append(args, rootPath, rootPath)
 	}
 	if q.Q != "" && q.Match == "prefix" {
 		where += " AND (substr(i.name_fold,1,length(?))=? OR substr(i.path_fold,1,length(?))=?)"

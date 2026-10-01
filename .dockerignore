@@ -10,6 +10,7 @@ compose.override.yaml
 compose.override.yml
 docs/assets
 .github
+.folderhug-ci.*
 data
 downloads
 cache
