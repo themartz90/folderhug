@@ -139,7 +139,7 @@ jobs:
           )
           printf 'Source commit: %s\nSource archive: https://github.com/%s/archive/%s.tar.gz\n\nThe image manifest records the exact app digest used for these assets. Check the attached package source and copyright materials against the built image before publishing this draft.\n' \
             "$SOURCE_SHA" "$GITHUB_REPOSITORY" "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
-          release_args=(--draft --verify-tag --title "Folderhug $TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
+          release_args=(--draft --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md")
           if [[ $TAG == *-rc.* ]]; then
             release_args+=(--prerelease)
           fi
