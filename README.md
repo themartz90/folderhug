@@ -53,6 +53,14 @@ The default Compose file pulls `ghcr.io/themartz90/folderhug:latest`. You do not
 
 Confirm `/mnt/drive` exists on the Docker host before starting; short bind syntax can create a missing host directory. Give the container's UID/GID 10001 write access to the folder. Run `docker compose up -d` after adding the mount. **drive** then appears in **Save to server**. Mounted jobs use `/downloads` for temporary storage, so keep that volume and enough space for the file. See [download details](docs/DOWNLOADS.md) for multiple mounts, resume behavior, and missing-path checks.
 
+## API
+
+Use the `/api/v1` API to browse and filter folders, run bounded scans, search the local index, and export scan results as JSON or CSV. Scripts can also stream files, queue server downloads, and check or control their jobs.
+
+Create an API token in **Settings**, choosing the profiles and permissions your script needs. Token-based downloads save to Folderhug's server downloads directory; saving to mounted host folders requires an owner session.
+
+See the [API usage guide](docs/API_USAGE.md) for authentication, permissions, and PowerShell examples, or the [OpenAPI specification](api/openapi.yaml) for the full endpoint contract.
+
 ## Limits and further reading
 
 - Standard Apache table/preformatted and nginx listings are supported. Custom listing pages may need a parser change.
