@@ -19,13 +19,14 @@ FROM build AS test
 COPY tests ./tests
 CMD ["go", "test", "-race", "./..."]
 
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS app
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS app
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.source="https://github.com/themartz90/folderhug" \
       org.opencontainers.image.title="Folderhug" \
       org.opencontainers.image.description="A self-hosted file explorer for HTTP directory listings" \
       org.opencontainers.image.revision=$VCS_REF
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \
     && mkdir /data /keys /downloads /cache && chown app:app /data /keys /downloads /cache

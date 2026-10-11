@@ -31,6 +31,11 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: node scripts/check-public.mjs
+      - name: Check exact Debian source snapshot fallback
+        if: runner.os == 'Linux'
+        run: |
+          python3 -B -m unittest discover -s tests/scripts -p 'test_debian_snapshot_sources.py' -v
+          bash tests/scripts/test_collect_debian_sources.sh
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck= -pyflakes=
         if: runner.os == 'Linux'
       - run: npm ci

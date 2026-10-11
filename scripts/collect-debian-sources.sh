@@ -34,35 +34,51 @@ for line in (root / "app-packages.tsv").read_text().splitlines():
         raise SystemExit(f"Unexpected Debian source version: {source_version}")
     sources.add((source, source_version))
 (root / "source-packages.tsv").write_text(
-    "".join(f"{name}\t{version}\n" for name, version in sorted(sources))
+    "".join(f"{name}\t{version}\n" for name, version in sorted(sources)), newline="\n"
 )
 if not sources:
     raise SystemExit("No Debian source packages found")
 PY
 
 absolute_output=$(cd "$output_dir" && pwd)
+docker run --rm --network none --entrypoint cat "$app_image" \
+  /etc/apt/sources.list.d/debian.sources > "$output_dir/app-apt-sources.sources"
+python3 scripts/debian-snapshot-sources.py "$output_dir/app-apt-sources.sources" "$output_dir/snapshot.sources"
 docker run --rm \
+  --user 0:0 \
   --mount "type=bind,source=$absolute_output,target=/work" \
   --workdir /work \
   --entrypoint sh \
-  debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 \
+  "$app_image" \
   -ec '
     cat > /etc/apt/sources.list.d/folderhug-source.list <<EOF
 deb-src [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main
 deb-src [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm-updates main
 deb-src [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian-security bookworm-security main
 EOF
-    apt-get update -qq
+    apt-get -o APT::Update::Error-Mode=any update -qq
     cd /work/sources
+    : > /work/missing-sources.tsv
     while IFS="$(printf "\t")" read -r source version; do
       if ! apt-get source --download-only --only-source "$source=$version" > /work/apt-source.log 2>&1; then
+        printf "%s\t%s\n" "$source" "$version" >> /work/missing-sources.tsv
+      fi
+    done < /work/source-packages.tsv
+    if test -s /work/missing-sources.tsv; then
+      # Historical metadata needs its expiry relaxed; signatures and hashes remain required.
+      cp /work/snapshot.sources /etc/apt/sources.list.d/folderhug-snapshot.sources
+      apt-get -o APT::Update::Error-Mode=any update -qq
+      while IFS="$(printf "\t")" read -r source version; do
+        if apt-get source --download-only --only-source "$source=$version" > /work/apt-source.log 2>&1; then
+          continue
+        fi
         echo "Exact Debian source unavailable: $source=$version" >&2
         tail -n 20 /work/apt-source.log >&2
         exit 1
-      fi
-    done < /work/source-packages.tsv
+      done < /work/missing-sources.tsv
+    fi
   '
-rm -f "$output_dir/apt-source.log"
+rm -f "$output_dir/apt-source.log" "$output_dir/missing-sources.tsv"
 
 if ! find "$output_dir/sources" -maxdepth 1 -name '*.dsc' -print -quit | grep -q .; then
   echo 'No Debian source control files were downloaded.' >&2
