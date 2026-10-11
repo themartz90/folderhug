@@ -2,7 +2,7 @@ Folderhug third-party license texts
 Copied from the installed dependency versions listed below.
 
 ========================================================================
-Go 1.27.1 / LICENSE
+Go 1.27.2 / LICENSE
 ========================================================================
 Copyright 2009 The Go Authors.
 
@@ -196,7 +196,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ========================================================================
-golang.org/x/net v0.59.0 / LICENSE
+golang.org/x/net v0.60.0 / LICENSE
 ========================================================================
 Copyright 2009 The Go Authors.
 

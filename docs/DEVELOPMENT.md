@@ -1,6 +1,6 @@
 # Windows development
 
-Use Go 1.27.1, Node 24, and npm 11.5.1 or newer within major version 11. The repository pins Node 24.21.0 in `.node-version`; `web/package.json` records npm 11.19.0. The examples below use PowerShell from the repository root. Docker and WSL are not required for native app development.
+Use Go 1.27.2, Node 24, and npm 11.5.1 or newer within major version 11. The repository pins Node 24.21.0 in `.node-version`; `web/package.json` records npm 11.19.0. The examples below use PowerShell from the repository root. Docker and WSL are not required for native app development.
 
 Native development uses port `8080`. Docker Compose publishes host port `48321` by default.
 

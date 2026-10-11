@@ -4,7 +4,7 @@ Folderhug's original source is covered by the repository's [MIT license](../LICE
 
 ## Native app
 
-The inventory below follows the modules required by `go.mod`. Which packages enter a binary depends on the target platform and build. The Go 1.27.1 standard-library license is included in the appendix as well.
+The inventory below follows the modules required by `go.mod`. Which packages enter a binary depends on the target platform and build. The Go 1.27.2 standard-library license is included in the appendix as well.
 
 | Module | Version | Main license |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ The inventory below follows the modules required by `go.mod`. Which packages ent
 | `github.com/ncruces/go-strftime` | `v1.0.0` | MIT |
 | `github.com/remyoudompheng/bigfft` | `v0.0.0-20230129092748-24d4a6f8daec` | BSD-3-Clause |
 | `golang.org/x/crypto` | `v0.57.0` | BSD-3-Clause |
-| `golang.org/x/net` | `v0.59.0` | BSD-3-Clause |
+| `golang.org/x/net` | `v0.60.0` | BSD-3-Clause |
 | `golang.org/x/sys` | `v0.48.0` | BSD-3-Clause |
 | `golang.org/x/term` | `v0.46.0` | BSD-3-Clause |
 | `golang.org/x/text` | `v0.42.0` | BSD-3-Clause |
