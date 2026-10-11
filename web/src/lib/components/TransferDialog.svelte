@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
+  import { randomUUID } from '../uuid';
   import {
     api,
     browserDownload,
@@ -89,7 +90,7 @@
   });
   const keys: Record<string, string> = {};
   function key(id: string) {
-    return (keys[id] ??= crypto.randomUUID());
+    return (keys[id] ??= randomUUID());
   }
   async function openFolder(id: string, path: string) {
     const request = ++folderRequest;

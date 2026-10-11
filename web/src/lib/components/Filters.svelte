@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { randomUUID } from '../uuid';
   import { localDate, errorMessage, type Schema, type Preferences } from '../api';
   import Dialog from '../ui/Dialog.svelte';
   let {
@@ -44,7 +45,7 @@
           : [
               ...preferences.filter_presets,
               {
-                id: crypto.randomUUID(),
+                id: randomUUID(),
                 name: presetName.trim(),
                 profile_id: profileId,
                 filters: current(),

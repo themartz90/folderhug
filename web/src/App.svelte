@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { randomUUID } from './lib/uuid';
   import {
     api,
     ApiError,
@@ -470,7 +471,7 @@
   function openTransfer(request: TransferRequest) {
     transfer = {
       ...request,
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       session: currentSession(),
     };
   }
