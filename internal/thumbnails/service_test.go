@@ -32,6 +32,7 @@ type memorySource struct {
 	files             map[string]testfixture.File
 	calls             map[string]int
 	gate              <-chan struct{}
+	started, finished chan struct{}
 	active, maxActive int
 }
 
@@ -47,6 +48,7 @@ func (f *memorySource) Do(ctx context.Context, root *upstream.Root, method, path
 		files[key] = value
 	}
 	gate := f.gate
+	started, finished := f.started, f.finished
 	if path != "" {
 		f.active++
 		if f.active > f.maxActive {
@@ -55,7 +57,17 @@ func (f *memorySource) Do(ctx context.Context, root *upstream.Root, method, path
 	}
 	f.mu.Unlock()
 	if path != "" {
-		defer func() { f.mu.Lock(); f.active--; f.mu.Unlock() }()
+		if started != nil {
+			started <- struct{}{}
+		}
+		defer func() {
+			f.mu.Lock()
+			f.active--
+			f.mu.Unlock()
+			if finished != nil {
+				finished <- struct{}{}
+			}
+		}()
 		if gate != nil {
 			select {
 			case <-gate:
@@ -428,7 +440,7 @@ func TestRestartClearsOnlyManagedCacheFiles(t *testing.T) {
 	}
 }
 
-func TestBoundedImageQueueAndCredentialCancellation(t *testing.T) {
+func TestBoundedImageQueue(t *testing.T) {
 	f := newThumbnailFixture(t)
 	ctx := context.Background()
 	payload := syntheticJPEG(t, 1)
@@ -472,9 +484,60 @@ func TestBoundedImageQueueAndCredentialCancellation(t *testing.T) {
 	if _, err := f.s.Request(ctx, f.p, f.profile.ID, []string{ids[0], ids[0]}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("duplicate batch IDs accepted", err)
 	}
-	f.profiles.ClearPrincipal(profiles.LeaseID(f.p))
+	f.source.mu.Lock()
+	defer f.source.mu.Unlock()
+	if f.source.maxActive > 2 {
+		t.Fatal("image queue concurrency escaped", f.source.maxActive)
+	}
+}
+
+func TestImageQueueCredentialCancellation(t *testing.T) {
+	f := newThumbnailFixture(t)
+	ctx := context.Background()
+	if _, err := f.profiles.Patch(ctx, f.profile.ID, map[string]json.RawMessage{"auth_type": json.RawMessage(`"basic"`), "credentials": json.RawMessage(`{"username":"temporary","password":"temporary-secret","remember":false}`)}, f.p); err != nil {
+		t.Fatal(err)
+	}
+	page, err := f.catalog.Browse(ctx, f.profile.ID, profiles.LeaseID(f.p), "root", catalog.Query{Refresh: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{}
+	for _, entry := range page.Entries {
+		if entry.Name == "photo.jpg" || entry.Name == "second.jpg" || entry.Name == "bad.png" {
+			ids = append(ids, entry.ID)
+		}
+	}
+	if len(ids) != 3 {
+		t.Fatal("cancellation fixtures missing", len(ids))
+	}
+	started, finished := make(chan struct{}, 3), make(chan struct{}, 3)
+	f.source.mu.Lock()
+	f.source.gate = make(chan struct{})
+	f.source.started, f.source.finished = started, finished
+	f.source.mu.Unlock()
+	items, err := f.s.Request(ctx, f.p, f.profile.ID, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
 	deadline := time.NewTimer(3 * time.Second)
 	defer deadline.Stop()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-deadline.C:
+			t.Fatal("image workers did not start both upstream fetches")
+		}
+	}
+	f.profiles.ClearPrincipal(profiles.LeaseID(f.p))
+	deadline.Reset(3 * time.Second)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-finished:
+		case <-deadline.C:
+			t.Fatal("cancelled credentials left an active upstream fetch running")
+		}
+	}
+	deadline.Reset(3 * time.Second)
 	tick := time.NewTicker(time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -486,19 +549,25 @@ func TestBoundedImageQueueAndCredentialCancellation(t *testing.T) {
 		}
 		select {
 		case <-deadline.C:
-			t.Fatal("cancelled credentials left queued work running")
+			t.Fatal("cancelled image queue bookkeeping did not settle")
 		case <-tick.C:
+		}
+	}
+	for _, item := range items {
+		row, err := f.s.byID(ctx, item.ID)
+		if err != nil || row.State != "unavailable" {
+			t.Fatal("cancelled thumbnail did not become unavailable", row.State, err)
 		}
 	}
 	f.source.mu.Lock()
 	defer f.source.mu.Unlock()
 	calls := 0
 	for key, n := range f.source.calls {
-		if strings.HasPrefix(key, "GET /root/queued") {
+		if strings.HasPrefix(key, "GET /root/") && key != "GET /root/" {
 			calls += n
 		}
 	}
-	if f.source.maxActive > 2 || calls > 2 {
+	if f.source.active != 0 || f.source.maxActive != 2 || calls != 2 {
 		t.Fatal("image queue concurrency or stale credential boundary escaped", f.source.maxActive, calls)
 	}
 }
