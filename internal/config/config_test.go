@@ -8,6 +8,36 @@ import (
 	"testing"
 )
 
+func TestUpdateChecksConfiguration(t *testing.T) {
+	t.Setenv("FOLDERHUG_UPDATE_CHECKS", "")
+	t.Setenv("HTTPWRAPPER_UPDATE_CHECKS", "false")
+	cfg, err := Load()
+	if err != nil || !cfg.UpdateChecks {
+		t.Fatalf("default: %+v %v", cfg, err)
+	}
+	if err := os.Unsetenv("FOLDERHUG_UPDATE_CHECKS"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load()
+	if err != nil || cfg.UpdateChecks {
+		t.Fatalf("legacy fallback: %+v %v", cfg, err)
+	}
+	t.Setenv("FOLDERHUG_UPDATE_CHECKS", "false")
+	cfg, err = Load()
+	if err != nil || cfg.UpdateChecks {
+		t.Fatalf("disabled: %+v %v", cfg, err)
+	}
+	t.Setenv("FOLDERHUG_UPDATE_CHECKS", "true")
+	cfg, err = Load()
+	if err != nil || !cfg.UpdateChecks {
+		t.Fatalf("enabled: %+v %v", cfg, err)
+	}
+	t.Setenv("FOLDERHUG_UPDATE_CHECKS", "perhaps")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid boolean accepted")
+	}
+}
+
 func TestOriginAndAllowances(t *testing.T) {
 	for _, raw := range []string{"https://example.com/path", "https://user@example.com", "file:///tmp", "https://example.com?q=x"} {
 		t.Setenv("FOLDERHUG_PUBLIC_URL", raw)

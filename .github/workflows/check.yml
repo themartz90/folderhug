@@ -31,6 +31,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: node scripts/check-public.mjs
+      - run: node scripts/check-release.mjs
+      - run: node --test tests/scripts/check-release.test.mjs
       - name: Check exact Debian source snapshot fallback
         if: runner.os == 'Linux'
         run: |
@@ -112,5 +114,5 @@ jobs:
               .services.app.environment.FOLDERHUG_PUBLIC_URL == "http://localhost:18081" and
               .services.app.environment.FOLDERHUG_MOUNTED_ROOTS == "[]"'
       - run: docker compose -f compose.yaml -f compose.build.yaml build app
-      - run: docker build --platform linux/amd64 --target app -t folderhug:ci .
-      - run: bash scripts/ci-container-smoke.sh folderhug:ci
+      - run: docker build --platform linux/amd64 --target app --build-arg VERSION="$(cat VERSION)" --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:ci .
+      - run: bash scripts/ci-container-smoke.sh folderhug:ci "$GITHUB_SHA"

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/themartz90/folderhug/internal/auth"
+	"github.com/themartz90/folderhug/internal/buildinfo"
 	"github.com/themartz90/folderhug/internal/catalog"
 	"github.com/themartz90/folderhug/internal/config"
 	"github.com/themartz90/folderhug/internal/content"
@@ -19,10 +20,13 @@ import (
 	"github.com/themartz90/folderhug/internal/scans"
 	"github.com/themartz90/folderhug/internal/store"
 	"github.com/themartz90/folderhug/internal/thumbnails"
+	"github.com/themartz90/folderhug/internal/updates"
 	"github.com/themartz90/folderhug/internal/upstream"
 )
 
 type Server struct {
+	BuildInfo      buildinfo.Info
+	Updates        *updates.Service
 	Config         config.Config
 	Store          *store.Store
 	Auth           *auth.Service
@@ -44,6 +48,7 @@ func (s *Server) Handler(ui http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	if s.Auth != nil {
 		s.authRoutes(mux)
+		s.releaseRoutes(mux)
 		if s.Catalog != nil && s.Content != nil {
 			s.browseRoutes(mux)
 		}

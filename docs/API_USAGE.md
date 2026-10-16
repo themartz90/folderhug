@@ -2,6 +2,8 @@
 
 The implemented contract is [api/openapi.yaml](../api/openapi.yaml). Paths start with `/api/v1`; JSON uses snake_case. These PowerShell 7 examples use an API token created in Settings. Choose only the profiles and scopes the script needs. The token secret is shown once.
 
+The browser uses `GET /release` for installed build information and bundled highlights, and `GET /updates` for cached stable-release status. Both require an owner session and reject API tokens. GitHub lookup failures appear as unknown or stale status, so they do not block local release information.
+
 ## Connect and browse
 
 These examples use the default Compose host port, `48321`. Adjust `$base` for your installation; native development uses port `8080`.

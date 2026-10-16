@@ -18,6 +18,7 @@ import (
 )
 
 type Config struct {
+	UpdateChecks         bool
 	Address              string
 	PublicURL            *url.URL
 	DataDir              string
@@ -62,6 +63,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("FOLDERHUG_STREAM_TIMEOUT must be between 1s and 168h")
 	}
 	limits := map[string]int64{}
+	updateChecks, err := strconv.ParseBool(Value("UPDATE_CHECKS", "true"))
+	if err != nil {
+		return Config{}, fmt.Errorf("FOLDERHUG_UPDATE_CHECKS must be true or false")
+	}
 	var mounted []downloads.MountedRoot
 	if raw := Env("MOUNTED_ROOTS"); raw != "" {
 		if len(raw) > 65536 || json.Unmarshal([]byte(raw), &mounted) != nil || len(mounted) > 32 {
@@ -88,6 +93,7 @@ func Load() (Config, error) {
 		limits[key] = n
 	}
 	return Config{
+		UpdateChecks:        updateChecks,
 		DownloadBudgetBytes: limits["DOWNLOAD_BUDGET_BYTES"], DownloadReserveBytes: limits["DOWNLOAD_RESERVE_BYTES"], DownloadUnknownBytes: limits["DOWNLOAD_UNKNOWN_BYTES"], ThumbnailCacheBytes: limits["THUMBNAIL_CACHE_BYTES"],
 		Address: Value("ADDR", address), PublicURL: u,
 		DataDir:        Value("DATA_DIR", filepath.Join(base, "data")),

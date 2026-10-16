@@ -49,6 +49,14 @@ jobs:
             --json status,conclusion,headSha | jq -e --arg sha "$sha" \
             'any(.[]; .status == "completed" and .conclusion == "success" and .headSha == $sha)'
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+      - name: Validate canonical version and bundled highlights at the tagged source
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/check-release.mjs "$TAG"
       - name: Verify draft assets and immutable image manifest
         id: assets
         env:
@@ -85,6 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
           APP_REF: ${{ steps.assets.outputs.app_ref }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           repo_visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
@@ -103,7 +112,13 @@ jobs:
           for ref in "$APP_REF"; do
             docker pull --platform linux/amd64 "$ref"
             test "$(docker image inspect "$ref" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+            test "$(docker image inspect "$ref" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$TAG"
             test "$(docker image inspect "$ref" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+            channel=stable
+            if [[ $TAG == *-rc.* ]]; then channel=prerelease; fi
+            docker run --rm --read-only --network none "$ref" version | jq -e \
+              --arg tag "$TAG" --arg sha "$SOURCE_SHA" --arg channel "$channel" \
+              'keys == ["channel", "revision", "version"] and .version == $tag and .revision == $sha and .channel == $channel'
           done
       - name: Push the version image
         env:

@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image=${1:?usage: ci-container-smoke.sh IMAGE}
+image=${1:?usage: ci-container-smoke.sh IMAGE [EXPECTED_REVISION]}
+version=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')
+revision=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+if [[ $# -ge 2 ]]; then
+  test "$revision" = "$2"
+  test "$version" = "$(tr -d '\r\n' < VERSION)"
+fi
+channel=stable
+if [[ $version == dev ]]; then channel=development; elif [[ $version == *-rc.* ]]; then channel=prerelease; fi
+# Metadata inspection runs without mounts or network access and must not initialize app state.
+docker run --rm --read-only --network none "$image" version | jq -e \
+  --arg version "$version" --arg revision "$revision" --arg channel "$channel" \
+  'keys == ["channel", "revision", "version"] and .version == $version and .revision == $revision and .channel == $channel' >/dev/null
 # The mount fixture needs disk storage, since tmpfs is not a save destination.
 state_dir=$(mktemp -d "$PWD/.folderhug-ci.XXXXXX")
 mount_dir="$state_dir/mount"

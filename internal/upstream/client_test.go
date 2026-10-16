@@ -84,6 +84,28 @@ func TestAddressPolicy(t *testing.T) {
 	}
 }
 
+func TestReleaseRequestHeaderAllowlist(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("User-Agent") != "Folderhug" || r.Header.Get("X-GitHub-Api-Version") != "2026-03-10" || r.Header.Get("Accept") != "application/vnd.github+json" {
+			t.Errorf("release headers missing: %v", r.Header)
+		}
+		for _, name := range []string{"Authorization", "Cookie", "X-Private-Header", "Proxy-Authorization"} {
+			if r.Header.Get(name) != "" {
+				t.Errorf("forwarded %s", name)
+			}
+		}
+		io.WriteString(w, "ok")
+	}))
+	defer server.Close()
+	c := fixtureClient(t, server, Policy{})
+	headers := http.Header{"User-Agent": {"Folderhug"}, "X-Github-Api-Version": {"2026-03-10"}, "Accept": {"application/vnd.github+json"}, "Authorization": {"secret"}, "Cookie": {"secret"}, "X-Private-Header": {"secret"}, "Proxy-Authorization": {"secret"}}
+	res, err := c.Do(context.Background(), testRoot(t, "http://source.example/"), "GET", "", Options{Headers: headers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readBody(t, res)
+}
+
 func TestRejectedDNSNeverDials(t *testing.T) {
 	for _, answer := range [][]netip.Addr{
 		{netip.MustParseAddr("127.0.0.1")}, {netip.MustParseAddr("::ffff:169.254.169.254")},

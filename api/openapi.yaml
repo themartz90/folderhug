@@ -65,7 +65,7 @@ x-scope-matrix:
   scan:write: Create scans and control scans created by this token within its profiles.
   downloads:write: Destinations, create/list/read/control this token's download jobs and job events.
   credentials:unlock: Temporary unlock/lock of this token's own credential lease; no stored credentials.
-  owner_only: Profile edits, connection tests, stored credentials, token administration, preferences, bookmarks, completed-file deletion.
+  owner_only: Profile edits, connection tests, stored credentials, token administration, preferences, bookmarks, completed-file deletion, release metadata, update status.
 paths:
   /auth/setup:
     get:
@@ -661,6 +661,26 @@ paths:
       responses:
         '204': { description: Token revoked. }
         default: { $ref: '#/components/responses/Error' }
+  /release:
+    get:
+      operationId: getRelease
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Installed build identity and bundled release highlights.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/ReleaseInfo' } }
+        default: { $ref: '#/components/responses/Error' }
+  /updates:
+    get:
+      operationId: getUpdates
+      security: [{ owner_session: [] }]
+      responses:
+        '200':
+          description: Cached check for the latest official stable release. Lookup failures return an unknown or stale status.
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/UpdateStatus' } }
+        default: { $ref: '#/components/responses/Error' }
   /status:
     get:
       operationId: getStatus
@@ -847,6 +867,53 @@ components:
       content:
         application/json: { schema: { $ref: '#/components/schemas/ApiError' } }
   schemas:
+    BuildInfo:
+      type: object
+      required: [version, revision, channel]
+      properties:
+        version: { type: string }
+        revision: { type: string }
+        channel: { type: string, enum: [stable, prerelease, development] }
+    ReleaseHighlights:
+      type: object
+      required: [version, auto_show, summary, highlights]
+      properties:
+        version: { type: string }
+        auto_show: { type: boolean }
+        summary: { type: string, maxLength: 400 }
+        highlights:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { type: string, maxLength: 240 }
+    ReleaseInfo:
+      type: object
+      required: [current, highlights]
+      properties:
+        current: { $ref: '#/components/schemas/BuildInfo' }
+        highlights:
+          oneOf:
+            - { $ref: '#/components/schemas/ReleaseHighlights' }
+            - { type: 'null' }
+    LatestRelease:
+      type: object
+      required: [version, release_url, published_at]
+      properties:
+        version: { type: string }
+        release_url: { type: string, format: uri }
+        published_at: { type: string, format: date-time }
+    UpdateStatus:
+      type: object
+      required: [state, latest, checked_at, stale, retry_at]
+      properties:
+        state: { type: string, enum: [current, available, ahead, unknown, disabled, development] }
+        latest:
+          oneOf:
+            - { $ref: '#/components/schemas/LatestRelease' }
+            - { type: 'null' }
+        checked_at: { type: [string, 'null'], format: date-time }
+        stale: { type: boolean }
+        retry_at: { type: [string, 'null'], format: date-time }
     ErrorCode:
       type: string
       enum: [invalid_request, unauthenticated, forbidden, csrf_failed, not_found, invalid_state, snapshot_expired, idempotency_conflict, restart_required, scan_superseded, request_too_large, listing_limit, unsupported_media, rate_limited, budget_exceeded, upstream_auth_required, upstream_unavailable, upstream_timeout, unsupported_listing, representation_changed, range_not_satisfiable, unsafe_path, unsafe_origin, credentials_required, unavailable, storage_full, internal_error]

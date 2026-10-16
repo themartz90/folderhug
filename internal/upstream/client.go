@@ -113,7 +113,7 @@ func (c *Client) Do(ctx context.Context, root *Root, method, relativePath string
 			finish()
 			return nil, ErrURL
 		}
-		for _, name := range []string{"Accept", "Range", "If-Range", "If-Match", "If-None-Match", "If-Modified-Since", "If-Unmodified-Since"} {
+		for _, name := range []string{"Accept", "Range", "If-Range", "If-Match", "If-None-Match", "If-Modified-Since", "If-Unmodified-Since", "User-Agent", "X-GitHub-Api-Version"} {
 			if value := options.Headers.Get(name); value != "" {
 				req.Header.Set(name, value)
 			}

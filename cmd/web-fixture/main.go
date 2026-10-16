@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/themartz90/folderhug/internal/auth"
+	"github.com/themartz90/folderhug/internal/buildinfo"
 	"github.com/themartz90/folderhug/internal/catalog"
 	"github.com/themartz90/folderhug/internal/config"
 	"github.com/themartz90/folderhug/internal/content"
@@ -32,6 +33,7 @@ import (
 	"github.com/themartz90/folderhug/internal/scans"
 	"github.com/themartz90/folderhug/internal/store"
 	"github.com/themartz90/folderhug/internal/thumbnails"
+	"github.com/themartz90/folderhug/internal/updates"
 	"github.com/themartz90/folderhug/internal/upstream"
 	"github.com/themartz90/folderhug/internal/webui"
 )
@@ -99,6 +101,9 @@ func run() error {
 	publicURL, _ := url.Parse(appOrigin)
 	cfg := config.Config{Address: publicURL.Host, PublicURL: publicURL, DataDir: dir, DownloadsDir: filepath.Join(dir, "downloads"), CacheDir: filepath.Join(dir, "cache"), StreamMaxBytes: 64 << 20, StreamTimeout: 2 * time.Minute, ThumbnailCacheBytes: 32 << 20}
 	app := &httpapi.Server{Config: cfg, Store: db, Auth: owner, Profiles: profileService, Upstream: transport}
+	app.BuildInfo = buildinfo.Current()
+	app.Updates = updates.New(nil, app.BuildInfo, false)
+	defer app.Updates.Close()
 	app.Catalog = catalog.New(db.DB, profileService, transport)
 	app.Content = content.New(transport, content.Limits{MaxBytes: cfg.StreamMaxBytes, Timeout: cfg.StreamTimeout})
 	app.Events = events.New(owner)

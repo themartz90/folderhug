@@ -1,0 +1,10 @@
+{
+  "version": "v0.2.0",
+  "auto_show": true,
+  "summary": "Version details and release notes are now available beside Settings.",
+  "highlights": [
+    "Click the installed version to reopen this summary at any time.",
+    "A separate update link appears when a newer stable release is available on GitHub.",
+    "New release summaries open once per browser, after any other dialog closes."
+  ]
+}

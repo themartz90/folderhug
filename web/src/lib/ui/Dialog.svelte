@@ -1,20 +1,24 @@
 <script lang="ts">
   import { onMount, tick, type Snippet } from 'svelte';
   import Icon from './Icon.svelte';
-  import { dialogOpener } from './focus';
+  import { dialogOpener, openDialogs } from './focus';
   let {
     title,
     onclose,
     children,
     wide = false,
-  }: { title: string; onclose: () => void; children: Snippet; wide?: boolean } = $props();
+    onopen,
+  }: { title: string; onclose: () => void; children: Snippet; wide?: boolean; onopen?: () => void } = $props();
   let dialog: HTMLDialogElement;
   const titleId = $props.id();
   onMount(() => {
     const opener = dialogOpener();
     dialog.showModal();
+    openDialogs.update((count) => count + 1);
+    onopen?.();
     return () => {
       dialog.close();
+      openDialogs.update((count) => count - 1);
       void tick().then(() => {
         if (opener?.isConnected) opener.focus();
       });

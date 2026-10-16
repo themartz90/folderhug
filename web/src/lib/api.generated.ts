@@ -696,6 +696,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUpdates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/status": {
         parameters: {
             query?: never;
@@ -766,6 +798,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        BuildInfo: {
+            version: string;
+            revision: string;
+            /** @enum {string} */
+            channel: "stable" | "prerelease" | "development";
+        };
+        ReleaseHighlights: {
+            version: string;
+            auto_show: boolean;
+            summary: string;
+            highlights: string[];
+        };
+        ReleaseInfo: {
+            current: components["schemas"]["BuildInfo"];
+            highlights: components["schemas"]["ReleaseHighlights"] | null;
+        };
+        LatestRelease: {
+            version: string;
+            /** Format: uri */
+            release_url: string;
+            /** Format: date-time */
+            published_at: string;
+        };
+        UpdateStatus: {
+            /** @enum {string} */
+            state: "current" | "available" | "ahead" | "unknown" | "disabled" | "development";
+            latest: components["schemas"]["LatestRelease"] | null;
+            /** Format: date-time */
+            checked_at: string | null;
+            stale: boolean;
+            /** Format: date-time */
+            retry_at: string | null;
+        };
         /** @enum {string} */
         ErrorCode: "invalid_request" | "unauthenticated" | "forbidden" | "csrf_failed" | "not_found" | "invalid_state" | "snapshot_expired" | "idempotency_conflict" | "restart_required" | "scan_superseded" | "request_too_large" | "listing_limit" | "unsupported_media" | "rate_limited" | "budget_exceeded" | "upstream_auth_required" | "upstream_unavailable" | "upstream_timeout" | "unsupported_listing" | "representation_changed" | "range_not_satisfiable" | "unsafe_path" | "unsafe_origin" | "credentials_required" | "unavailable" | "storage_full" | "internal_error";
         ApiError: {
@@ -2323,6 +2388,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Installed build identity and bundled release highlights. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseInfo"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cached check for the latest official stable release. Lookup failures return an unknown or stale status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatus"];
+                };
             };
             default: components["responses"]["Error"];
         };

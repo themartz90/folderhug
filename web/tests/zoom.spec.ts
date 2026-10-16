@@ -91,6 +91,18 @@ test('native 200% browser zoom keeps browsing and preview controls usable', asyn
     await page.keyboard.press('Escape');
     await expect(preview).not.toBeVisible();
     await expect(file).toBeFocused();
+    await menu.click();
+    const version = navigation.getByRole('button', { name: "What's new in Folderhug dev", exact: true });
+    await version.scrollIntoViewIfNeeded();
+    await expect(version).toBeInViewport();
+    await version.click();
+    const release = page.getByRole('dialog', { name: "What's new in Folderhug dev", exact: true });
+    await expect(release).toBeVisible();
+    await release.getByRole('button', { name: 'Close', exact: true }).scrollIntoViewIfNeeded();
+    await expect(release.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath('release-native-200-percent.png') });
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeFocused();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally {

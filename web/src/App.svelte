@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { randomUUID } from './lib/uuid';
   import {
     api,
@@ -17,6 +17,9 @@
   import { defaultView, readRoute, routeHash, type Route } from './lib/explorer';
   import Explorer from './lib/components/Explorer.svelte';
   import Brand from './lib/components/Brand.svelte';
+  import ReleaseIndicator from './lib/components/ReleaseIndicator.svelte';
+  import ReleaseDialog from './lib/components/ReleaseDialog.svelte';
+  import { ageUpdateStatus, canAutoShow, markReleaseSeen } from './lib/releases';
   import ProfileDialog from './lib/components/ProfileDialog.svelte';
   import Appearance from './lib/components/Appearance.svelte';
   import TransferDialog from './lib/components/TransferDialog.svelte';
@@ -28,7 +31,7 @@
   import Tokens from './lib/screens/Tokens.svelte';
   import Dialog from './lib/ui/Dialog.svelte';
   import Icon from './lib/ui/Icon.svelte';
-  import { rememberOpener, clearRememberedFocus } from './lib/ui/focus';
+  import { rememberOpener, clearRememberedFocus, openDialogs } from './lib/ui/focus';
   import { readStoredValue, removeStoredValue, writeStoredValue } from './lib/storage';
   let authenticated = $state(false);
   let starting = $state(true);
@@ -51,6 +54,14 @@
     profile_views: {},
   });
   let status = $state<Schema['Status'] | null>(null);
+  let release = $state<Schema['ReleaseInfo'] | null>(null);
+  let updates = $state<Schema['UpdateStatus'] | null>(null);
+  let checkingUpdates = $state(false);
+  let releaseOpen = $state(false);
+  let bootstrapReady = $state(false);
+  let seenRevision = $state(0);
+  let openedVersion = $state('');
+  let releaseOpener: HTMLElement | null = null;
   let route = $state<Route>(readRoute());
   let find = $state<FindRun | null>(readFind());
   let findScan = $state<Scan | null>(null);
@@ -129,6 +140,7 @@
       media = null;
       transfer = null;
       profileForm = null;
+      releaseOpen = false;
     };
     window.addEventListener('popstate', pop);
     const connection = () => {
@@ -170,6 +182,81 @@
       setSession(null);
     };
   });
+  $effect(() => {
+    if (!authenticated) return;
+    const controller = new AbortController();
+    let lastCheck = 0;
+    let inFlight = false;
+    void api<Schema['ReleaseInfo']>('/release', { signal: controller.signal })
+      .then((value) => { if (!controller.signal.aborted) release = value; })
+      .catch(() => {});
+    const check = () => {
+      if (controller.signal.aborted || inFlight || !navigator.onLine || document.visibilityState !== 'visible' || Date.now() - lastCheck < 60 * 60 * 1000) return;
+      lastCheck = Date.now();
+      inFlight = true;
+      checkingUpdates = true;
+      void api<Schema['UpdateStatus']>('/updates', { signal: controller.signal })
+        .then((value) => { if (!controller.signal.aborted) updates = ageUpdateStatus(value); })
+        .catch(() => {
+          if (!controller.signal.aborted) updates = updates ? { ...updates, stale: true, state: updates.state === 'available' ? 'available' : 'unknown' } : null;
+        })
+        .finally(() => { inFlight = false; if (!controller.signal.aborted) checkingUpdates = false; });
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (!event.key || event.key.startsWith('folderhug.release-highlights.seen.')) seenRevision++;
+    };
+    const timer = setInterval(check, 60 * 60 * 1000);
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('storage', storageChanged);
+    check();
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('storage', storageChanged);
+    };
+  });
+  $effect(() => {
+    if (!updates?.latest || updates.stale) return;
+    const value = updates;
+    const expiry = Date.parse(value.checked_at ?? '') + 12 * 60 * 60 * 1000;
+    const timer = setTimeout(() => {
+      if (updates === value) updates = ageUpdateStatus(value);
+    }, Math.max(0, Number.isFinite(expiry) ? expiry - Date.now() : 0));
+    return () => clearTimeout(timer);
+  });
+  $effect(() => {
+    void seenRevision;
+    const version = release?.current.version;
+    if (!authenticated || !bootstrapReady || starting || signingIn || globalError || !version || openedVersion === version || releaseOpen || $openDialogs > 0 || drawer || profileForm || appearance || confirmingLogoutAll || transfer || media) return;
+    if (!canAutoShow(version, release?.highlights ?? null)) return;
+    const generation = currentSession();
+    const timer = setTimeout(() => {
+      if (generation !== currentSession() || !canAutoShow(version, release?.highlights ?? null)) return;
+      void openRelease();
+    }, 0);
+    return () => clearTimeout(timer);
+  });
+  async function openRelease() {
+    const generation = currentSession();
+    const active = document.activeElement;
+    releaseOpener = active instanceof HTMLElement && !active.closest('dialog') ? active : document.querySelector<HTMLElement>('button[aria-label="Toggle sidebar"]');
+    drawer = false;
+    await tick();
+    if (authenticated && generation === currentSession()) releaseOpen = true;
+  }
+  function releaseOpened() {
+    if (!release) return;
+    openedVersion = release.current.version;
+    markReleaseSeen(release.current.version);
+  }
+  function closeRelease() {
+    const opener = releaseOpener;
+    releaseOpen = false;
+    void tick().then(() => { if (opener?.isConnected) opener.focus(); });
+  }
   $effect(() => {
     const id = find?.id;
     void revision;
@@ -219,6 +306,13 @@
     profiles = [];
     bookmarks = [];
     status = null;
+    release = null;
+    updates = null;
+    checkingUpdates = false;
+    releaseOpen = false;
+    bootstrapReady = false;
+    openedVersion = '';
+    releaseOpener = null;
     find = null;
     findScan = null;
     try { removeStoredValue(sessionStorage, 'find'); } catch { /* Storage is optional. */ }
@@ -310,6 +404,7 @@
     }
   }
   async function bootstrap() {
+    bootstrapReady = false;
     globalError = '';
     try {
       const [p, prefs, b, s] = await Promise.all([
@@ -323,6 +418,7 @@
       preferences = prefs;
       bookmarks = b.bookmarks;
       status = s;
+      bootstrapReady = true;
       if (!route.profile && profiles.length) {
         let saved: { profile?: string; directory?: string } = {};
         try {
@@ -643,7 +739,9 @@
           title="Settings"
           onclick={() => navigate({ ...route, page: 'settings', scroll: 0 })}
           ><Icon name="settings" size={19} /><span class="nav-label">Settings</span></button
-        ><button class="appearance-link" title="Sign out" onclick={() => void logout()}
+        >
+        <ReleaseIndicator {release} {updates} onopen={() => void openRelease()} />
+        <button class="appearance-link" title="Sign out" onclick={() => void logout()}
           ><Icon name="external" size={19} /><span class="nav-label">Sign out</span></button
         >
       </div>
@@ -846,6 +944,7 @@
         onsave={savePreferences}
         onclose={() => (appearance = false)}
       />{/if}
+    {#if releaseOpen}<ReleaseDialog {release} {updates} checking={checkingUpdates} onclose={closeRelease} onopen={releaseOpened} />{/if}
     {#if confirmingLogoutAll}<Dialog title="Sign out all devices" onclose={() => (confirmingLogoutAll = false)}>
         <p class="modal-intro">This ends every owner session, including this one. You will need to sign in again on each device.</p>
         <div class="modal-actions">

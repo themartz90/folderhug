@@ -287,6 +287,21 @@ input[type='checkbox'] {
   display: grid;
   gap: 2px;
 }
+.release-indicator { min-width: 0; }
+.release-indicator .release-version { font-size: 12px; }
+.release-version .nav-label { overflow-wrap: anywhere; }
+.release-indicator .release-update { color: var(--accent); font-size: 12px; }
+.release-content { min-width: 0; }
+.release-summary { margin: 0 0 16px; line-height: 1.6; }
+.release-highlights { margin: 0; padding-left: 20px; line-height: 1.6; }
+.release-highlights li + li { margin-top: 8px; }
+.release-highlights li { overflow-wrap: anywhere; }
+.release-check { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 12px; color: var(--muted); font-size: 12px; }
+.release-check p { margin: 0 0 6px; }
+.release-check a { color: var(--accent); }
+.release-check a svg { display: inline; vertical-align: -2px; }
+.release-checked { font-size: 11px; }
+.release-actions { flex-wrap: wrap; }
 .queue-peek {
   display: block;
   width: calc(100% - 10px);

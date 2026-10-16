@@ -7,13 +7,19 @@ COPY api ./api
 RUN cd web && npm run build
 
 FROM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS build
+ARG VERSION=dev
+ARG VCS_REF=unknown
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+COPY VERSION ./VERSION
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/folderhug ./cmd/folderhug
+RUN if [ "$VERSION" != dev ]; then test "$VERSION" = "$(cat VERSION)"; fi \
+    && CGO_ENABLED=0 go build -trimpath \
+      -ldflags="-s -w -X github.com/themartz90/folderhug/internal/buildinfo.Version=$VERSION -X github.com/themartz90/folderhug/internal/buildinfo.Revision=$VCS_REF" \
+      -o /out/folderhug ./cmd/folderhug
 
 FROM build AS test
 COPY tests ./tests
@@ -21,10 +27,12 @@ CMD ["go", "test", "-race", "./..."]
 
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS app
 ARG VCS_REF=unknown
+ARG VERSION=dev
 LABEL org.opencontainers.image.source="https://github.com/themartz90/folderhug" \
       org.opencontainers.image.title="Folderhug" \
       org.opencontainers.image.description="A self-hosted file explorer for HTTP directory listings" \
-      org.opencontainers.image.revision=$VCS_REF
+      org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.version=$VERSION
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

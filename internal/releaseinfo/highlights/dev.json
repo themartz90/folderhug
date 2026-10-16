@@ -1,0 +1,9 @@
+{
+  "version": "dev",
+  "auto_show": false,
+  "summary": "Preview of version information and release highlights in Folderhug.",
+  "highlights": [
+    "See the installed build beside Settings and reopen its bundled release summary.",
+    "Check for a newer stable release through the Folderhug server."
+  ]
+}

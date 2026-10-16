@@ -34,13 +34,14 @@ jobs:
         with:
           persist-credentials: false
       - run: node scripts/check-public.mjs
+      - run: node scripts/check-release.mjs
       - name: Build the Linux amd64 image
         run: |
-          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:build-check .
+          docker build --platform linux/amd64 --target app --build-arg VERSION="$(cat VERSION)" --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:build-check .
       - name: Check Compose and app startup
         run: |
           FOLDERHUG_IMAGE=folderhug:build-check docker compose -f compose.yaml config --quiet
-          bash scripts/ci-container-smoke.sh folderhug:build-check
+          bash scripts/ci-container-smoke.sh folderhug:build-check "$GITHUB_SHA"
 
   publish:
     if: inputs.publish_images
@@ -80,8 +81,9 @@ jobs:
           done
       - name: Rebuild and smoke the exact revision
         run: |
-          docker build --platform linux/amd64 --target app --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:publish-check .
-          bash scripts/ci-container-smoke.sh folderhug:publish-check
+          node scripts/check-release.mjs
+          docker build --platform linux/amd64 --target app --build-arg VERSION="$(cat VERSION)" --build-arg VCS_REF="$GITHUB_SHA" -t folderhug:publish-check .
+          bash scripts/ci-container-smoke.sh folderhug:publish-check "$GITHUB_SHA"
       - name: Push revision and main tags
         env:
           GH_TOKEN: ${{ github.token }}

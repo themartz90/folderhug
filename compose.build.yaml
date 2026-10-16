@@ -5,9 +5,15 @@ services:
     build:
       context: .
       target: app
+      args:
+        VERSION: ${FOLDERHUG_BUILD_VERSION:-dev}
+        VCS_REF: ${FOLDERHUG_BUILD_REVISION:-unknown}
   app:
     image: folderhug:local
     pull_policy: build
     build:
       context: .
       target: app
+      args:
+        VERSION: ${FOLDERHUG_BUILD_VERSION:-dev}
+        VCS_REF: ${FOLDERHUG_BUILD_REVISION:-unknown}

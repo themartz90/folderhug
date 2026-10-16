@@ -1,3 +1,7 @@
+import { writable } from 'svelte/store';
+
+export const openDialogs = writable(0);
+
 let clicked: HTMLElement | null = null;
 let clickedAt = 0;
 let outsideDialog: HTMLElement | null = null;

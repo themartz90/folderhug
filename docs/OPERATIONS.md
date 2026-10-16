@@ -29,6 +29,16 @@ docker compose -f compose.yaml -f compose.build.yaml up -d
 
 Both modes use the same volumes when the Compose project name stays the same. Do not run two app containers against those volumes at once. Record the source revision or image digest before updating.
 
+Source builds report `dev` by default. To build a versioned image from a clean release checkout, validate its metadata and set the build arguments before the build command:
+
+```sh
+export FOLDERHUG_BUILD_VERSION=$(cat VERSION)
+export FOLDERHUG_BUILD_REVISION=$(git rev-parse HEAD)
+node scripts/check-release.mjs "$FOLDERHUG_BUILD_VERSION"
+```
+
+These two build variables apply to `compose.build.yaml`. Ordinary prebuilt image installations already contain their version and source revision.
+
 The remaining examples use the default image installation without overlays. If you use a mounted-folder override, include `-f compose.yaml -f compose.mounts.yaml` in every later Compose command so an update keeps the mount. For a source build, use `-f compose.yaml -f compose.build.yaml`, followed by any mount override. Keep any `-p` project name you selected at first start. To choose another host port:
 
 ```sh
@@ -43,6 +53,14 @@ With no explicit public URL, Folderhug accepts `localhost` and literal IP addres
 
 ## Configuration
 
+The version below Settings opens the installed release's summary. A separate update link opens a newer stable GitHub release when one is available. Folderhug does not install updates automatically. Release candidates are compared with stable releases; development builds skip update checks.
+
+Update checks run on the server against the public `themartz90/folderhug` GitHub repository. Successful results are cached for 12 hours in memory. Failed requests wait at least an hour before retrying, or longer when GitHub requests it. A restart clears this cache. Requests use no GitHub token and send no profile details, upstream credentials, installed version or owner identifier. GitHub receives the server's network address and ordinary request metadata.
+
+To disable checks, set `FOLDERHUG_UPDATE_CHECKS: "false"` in `services.app.environment` in your Compose override, or set the environment variable for a native process. Version details and bundled summaries remain available without GitHub access. An unavailable or stale check never claims the installation is current.
+
+Release summaries open automatically once per version in each browser origin when enabled for that release, including a first visit. They wait for other dialogs to close. Browser storage records which versions have been shown; clearing it or changing the address can show a summary again. If storage is blocked, summaries remain available through the version button and do not open automatically. Seen state is local to the browser, not shared across devices.
+
 The native app reads environment variables directly. It does not load a `.env` file. Compose performs its normal variable interpolation, but only variables declared in the Compose service reach the container. Use an override file with `services.app.environment` for additional settings.
 
 Settings use the `FOLDERHUG_` prefix. The app still accepts `HTTPWRAPPER_` settings when the matching new variable is absent. If both are present, `FOLDERHUG_` takes precedence. Update old environment keys in Compose overrides too, since the base file now supplies the new names. The Compose port, public URL, and mounted-root substitutions also accept their old names.
@@ -53,6 +71,7 @@ The session cookie is `folderhug_session`. The database filename and stored encr
 | --- | --- | --- |
 | `FOLDERHUG_ADDR` | `127.0.0.1:8080` | Listening address; the container image defaults to `0.0.0.0:8080` |
 | `FOLDERHUG_PUBLIC_URL` | automatic for localhost and literal IP addresses | Set the exact public origin for a custom hostname or HTTPS reverse proxy |
+| `FOLDERHUG_UPDATE_CHECKS` | `true` | Check the official GitHub repository for newer stable releases after owner sign-in |
 | `FOLDERHUG_DATA_DIR` | `.local/data` | SQLite database and related files |
 | `FOLDERHUG_KEYS_DIR` | `.local/keys` | Credential encryption key |
 | `FOLDERHUG_DOWNLOADS_DIR` | `.local/downloads` | Completed and partial server downloads |

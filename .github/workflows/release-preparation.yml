@@ -78,10 +78,15 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.source_sha }}
           persist-credentials: false
       - run: node scripts/check-public.mjs
+      - name: Validate canonical version and bundled highlights at the tagged source
+        env:
+          TAG: ${{ needs.validate-tag.outputs.version_tag }}
+        run: node scripts/check-release.mjs "$TAG"
       - name: Pull the tested image and verify source labels
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate-tag.outputs.source_sha }}
+          TAG: ${{ needs.validate-tag.outputs.version_tag }}
         run: |
           set -euo pipefail
           app="ghcr.io/${GITHUB_REPOSITORY,,}"
@@ -89,7 +94,13 @@ jobs:
           for image in "$app"; do
             docker pull --platform linux/amd64 "$image:sha-$SOURCE_SHA"
             test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+            test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$TAG"
             test "$(docker image inspect "$image:sha-$SOURCE_SHA" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+            channel=stable
+            if [[ $TAG == *-rc.* ]]; then channel=prerelease; fi
+            docker run --rm --read-only --network none "$image:sha-$SOURCE_SHA" version | jq -e \
+              --arg tag "$TAG" --arg sha "$SOURCE_SHA" --arg channel "$channel" \
+              'keys == ["channel", "revision", "version"] and .version == $tag and .revision == $sha and .channel == $channel'
           done
       - name: Package Compose, checksums, notices, and exact Debian sources
         env:

@@ -14,7 +14,7 @@ const privateValues = existsSync('.env') ? readFileSync('.env', 'utf8').split(/\
 const allowedRoots = new Set(['.github', 'api', 'cmd', 'docs', 'examples', 'internal', 'scripts', 'tests', 'web']);
 const allowedFiles = new Set(['.dockerignore', '.gitattributes', '.gitignore', '.node-version',
   'CONTRIBUTING.md', 'Dockerfile', 'LICENSE', 'README.md', 'SECURITY.md', 'go.mod', 'go.sum',
-  'compose.yaml', 'compose.build.yaml']);
+  'compose.yaml', 'compose.build.yaml', 'VERSION']);
 
 for (const file of files) {
   if ((!file.includes('/') && !allowedFiles.has(file)) ||
