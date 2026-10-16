@@ -10,6 +10,8 @@ Folderhug is a self-hosted file explorer for HTTP directory listings, such as a 
 
 You can switch between list and grid views, filter a folder, pin folders, and use Find files to search subfolders. Folderhug has one owner account. Image thumbnails work in the app. Audio and video playback depends on your browser and the file's codec.
 
+**This is a new project and I'll update it and add new features as much as I can**
+
 ## Screenshots
 
 Default Amber in light and dark mode, using synthetic files and illustrations. The first row shows file selection and download actions; the second shows grid thumbnails and image filtering. Click a screenshot to open it at full size.
