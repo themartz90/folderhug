@@ -28,7 +28,8 @@ test('search shows image thumbnails, video icons and space below selection actio
   const video = page.getByRole('article', { name: 'unsupported-video.mp4', exact: true });
   await expect(video.locator('.file-mark.video svg')).toBeVisible();
   await expect(video.locator('img, video')).toHaveCount(0);
-  const indexed = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}`)).json();
+  const indexed = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&limit=100`)).json();
+  expect(indexed.entries).toHaveLength(3);
   const imageIDs = indexed.entries.filter((entry: { category: string }) => entry.category === 'image').map((entry: { id: string }) => entry.id);
   expect(requested.every((id) => imageIDs.includes(id))).toBe(true);
   const spacing = await page.locator('.activity-actions').evaluate((actions) => actions.nextElementSibling!.getBoundingClientRect().top - actions.getBoundingClientRect().bottom);
@@ -83,7 +84,8 @@ test('an unavailable thumbnail leaves search controls usable', async ({ page }) 
 test('offscreen search images wait for scrolling and pending requests stop on navigation', async ({ page }) => {
   await openLibrary(page);
   const scan = await findMedia(page);
-  const existing = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}`)).json();
+  const existing = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&limit=100`)).json();
+  expect(existing.entries).toHaveLength(3);
   const template = existing.entries.find((entry: { category: string }) => entry.category === 'image');
   const entries = Array.from({ length: 50 }, (_, i) => ({ ...template, id: `lazy-${i}`, name: `Result ${i}.png`, category: i === 49 ? 'image' : 'document' }));
   let requests = 0;

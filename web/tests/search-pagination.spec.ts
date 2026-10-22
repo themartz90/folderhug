@@ -12,10 +12,10 @@ async function openResults(page: Page) {
   await expect.poll(async () => (await (await page.request.get(`/api/v1/scans/${scan.id}`)).json()).state).toBe('completed');
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByText('Finished finding files', { exact: true })).toBeVisible();
-  const response = await page.request.get('/api/v1/search?limit=100');
+  const response = await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&limit=100`);
   expect(response.ok()).toBeTruthy();
   const existing = await response.json();
-  expect(existing.entries.length).toBeGreaterThan(0);
+  expect(existing.entries).toHaveLength(3);
   return existing;
 }
 

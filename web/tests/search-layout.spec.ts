@@ -21,8 +21,9 @@ for (const view of views) {
     await expect.poll(async () => (await (await page.request.get(`/api/v1/scans/${scan.id}`)).json()).state).toBe('completed');
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
     await expect(page.getByText('Finished finding files', { exact: true })).toBeVisible();
-    const existing = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}`)).json();
+    const existing = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&limit=100`)).json();
     const original = existing.entries;
+    expect(original).toHaveLength(3);
     const longName = 'A very long filename with spaces and Unicode café 雪 ' + 'filename'.repeat(18) + '.txt';
     const entries = [...original, ...Array.from({ length: 3 }, (_, i) => ({
       ...original[0], id: `layout-${i}`, name: i === 0 ? longName : `Result ${i + 4}.txt`,
