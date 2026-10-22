@@ -33,7 +33,8 @@ test('search shows image thumbnails, video icons and space below selection actio
   const imageIDs = indexed.entries.filter((entry: { category: string }) => entry.category === 'image').map((entry: { id: string }) => entry.id);
   expect(requested.every((id) => imageIDs.includes(id))).toBe(true);
   const spacing = await page.locator('.activity-actions').evaluate((actions) => actions.nextElementSibling!.getBoundingClientRect().top - actions.getBoundingClientRect().bottom);
-  expect(spacing).toBeGreaterThanOrEqual(12);
+  // Layout coordinate subtraction can round slightly below the 12px gap.
+  expect(spacing).toBeGreaterThanOrEqual(11.99);
   await page.screenshot({ path: '../.local/search-previews/desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
