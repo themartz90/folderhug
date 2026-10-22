@@ -352,7 +352,7 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, scans.ErrIdempotencyConflict):
 		problem(w, r, 409, "idempotency_conflict", "This idempotency key was already used for another request.")
 	case errors.Is(err, scans.ErrSnapshotExpired):
-		problem(w, r, 409, "snapshot_expired", "The index changed. Search again from the first page.")
+		problem(w, r, 409, "snapshot_expired", "These search results expired. Search again from the first page.")
 	case errors.Is(err, scans.ErrBudget):
 		w.Header().Set("Retry-After", "5")
 		problem(w, r, 429, "budget_exceeded", "The scan or search limit was reached.")

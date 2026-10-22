@@ -209,8 +209,8 @@ func TestNestedScanFiltersAndNaturalSearch(t *testing.T) {
 	f.source.mu.Unlock()
 	rescan := create(t, f, "rescan", Input{Categories: []string{"video"}})
 	wait(t, f.s, rescan.ID, "completed")
-	if _, err = f.s.Search(t.Context(), f.owner, SearchQuery{Q: "episode", Query: catalog.Query{Limit: 1, Cursor: *first.NextCursor}}); !errors.Is(err, ErrSnapshotExpired) {
-		t.Fatal("cursor survived index mutation", err)
+	if next, err := f.s.Search(t.Context(), f.owner, SearchQuery{Q: "episode", Query: catalog.Query{Limit: 1, Cursor: *first.NextCursor}}); err != nil || len(next.Entries) != 1 || next.Entries[0].Name != "Episode 2.mp4" {
+		t.Fatal("cursor did not continue after index mutation", next, err)
 	}
 }
 

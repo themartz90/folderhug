@@ -37,6 +37,9 @@
 .activity-page .job-actions {
   flex-basis: 100%;
 }
+.activity-page .activity-actions {
+  margin-bottom: 12px;
+}
 .activity-page .activity-note {
   color: var(--muted);
   font-size: 12px;

@@ -4,7 +4,7 @@ Folderhug's original source is covered by the repository's [MIT license](../LICE
 
 ## Native app
 
-The inventory below follows the modules required by `go.mod`. Which packages enter a binary depends on the target platform and build. The Go 1.27.2 standard-library license is included in the appendix as well.
+The inventory below follows the modules required by `go.mod`. Which packages enter a binary depends on the target platform and build. The Go 1.27.3 standard-library license is included in the appendix as well.
 
 | Module | Version | Main license |
 | --- | --- | --- |

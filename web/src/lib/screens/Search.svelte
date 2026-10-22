@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { onDestroy, untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { api, ApiError, browserDownload, contentPath, errorMessage, formatBytes, formatDate, idPath, type Entry, type Profile, type Scan, type Schema } from '../api';
-  import { fileTypes, type FileType, type FindRun } from '../find';
+  import { fileTypes, type FileType, type FindPosition, type FindRun } from '../find';
+  import SearchPreview from '../components/SearchPreview.svelte';
   import './activity.css';
 
-  let { profiles, find, sourcePath, scan, revision, onopen, onbrowse, onback, onscan, onsave, onnotice, onrefresh, onfilters }: {
+  let { profiles, find, position, onposition, sourcePath, scan, revision, onopen, onbrowse, onback, onscan, onsave, onnotice, onrefresh, onfilters }: {
     profiles: Profile[];
     find: FindRun | null;
+    position: FindPosition | null;
+    onposition: (position: FindPosition) => void;
     sourcePath: string;
     scan: Scan | null;
     revision: number;
@@ -31,9 +34,16 @@
   let previous = $state<string[]>([]);
   let next = $state<string | null>(null);
   let activeId = '';
+  let scroller: HTMLElement;
+  let restoreScroll: number | null = null;
   let controller: AbortController | undefined;
   let selectedEntries = $derived(entries.filter((entry) => selected.includes(entry.id)));
   onDestroy(() => controller?.abort());
+
+  function rememberPosition() {
+    if (!activeId || !scroller?.isConnected) return;
+    onposition({ findId: activeId, cursor, previous: [...previous], scroll: restoreScroll ?? scroller.scrollTop });
+  }
 
   $effect(() => {
     const id = find?.id ?? '';
@@ -44,8 +54,10 @@
       types = [...(find?.types ?? [])];
       query = find?.query ?? '';
       appliedQuery = query.trim();
-      cursor = '';
-      previous = [];
+      const saved = position?.findId === id ? position : null;
+      cursor = saved?.cursor ?? '';
+      previous = [...(saved?.previous ?? [])];
+      restoreScroll = saved?.scroll ?? 0;
       entries = [];
       selected = [];
       coverage = [];
@@ -56,7 +68,9 @@
   });
   $effect(() => {
     void revision;
-    if (find?.id && activeId === find.id) untrack(() => { void load(); });
+    if (find?.id && activeId === find.id) untrack(() => {
+      if (!cursor) void load();
+    });
   });
 
   async function load() {
@@ -66,6 +80,7 @@
     controller = request;
     loading = true;
     error = '';
+    rememberPosition();
     try {
       const page = await api<Schema['SearchPage']>('/search', {
         query: {
@@ -80,21 +95,33 @@
       next = page.next_cursor;
       const visible = new Set(page.entries.map((entry) => entry.id));
       selected = selected.filter((id) => visible.has(id));
+      // Remove the loading note before restoring to avoid a scroll-anchor shift.
+      loading = false;
+      if (restoreScroll !== null) {
+        await tick();
+        if (request.signal.aborted) return;
+        scroller.scrollTop = restoreScroll;
+        restoreScroll = null;
+      }
+      rememberPosition();
     } catch (e) {
       if (request.signal.aborted) return;
       if (cursor && e instanceof ApiError && e.code === 'snapshot_expired') {
         cursor = '';
         previous = [];
         selected = [];
+        restoreScroll = 0;
+        onnotice('Search results expired. Showing page 1 again.');
         void load();
         return;
       }
       error = errorMessage(e);
     } finally { if (!request.signal.aborted) loading = false; }
   }
-  function search() { cursor = ''; previous = []; selected = []; appliedQuery = query.trim(); onfilters([...types], query); void load(); }
-  function forward() { if (loading || !next) return; previous = [...previous, cursor]; cursor = next; selected = []; void load(); }
-  function back() { if (loading || !previous.length) return; cursor = previous.at(-1) ?? ''; previous = previous.slice(0, -1); selected = []; void load(); }
+  function refresh() { cursor = ''; previous = []; selected = []; restoreScroll = 0; void load(); }
+  function search() { appliedQuery = query.trim(); onfilters([...types], query); refresh(); }
+  function forward() { if (loading || !next) return; previous = [...previous, cursor]; cursor = next; selected = []; restoreScroll = 0; void load(); }
+  function back() { if (loading || !previous.length) return; cursor = previous.at(-1) ?? ''; previous = previous.slice(0, -1); selected = []; restoreScroll = 0; void load(); }
   async function cancel() {
     if (!find) return;
     try { await api(`/scans/${idPath(find.id)}/cancel`, { method: 'POST' }); onrefresh(); }
@@ -111,11 +138,11 @@
   const parentPath = (entry: Entry) => entry.escaped_path.slice(0, entry.escaped_path.lastIndexOf('/') + 1) || '/';
 </script>
 
-<section class="page-scroll activity-page" aria-label="Search results">
+<section class="page-scroll activity-page search-page" aria-label="Search results" bind:this={scroller} onscroll={rememberPosition}>
   <div class="page-heading"><div>
     <h1>Search results</h1>
     <p>{find ? `${sourcePath} · ${find.directOnly ? 'This folder only' : 'This folder and subfolders'}` : 'Open a folder to find files.'}</p>
-  </div>{#if find}<button class="button secondary" onclick={onback}>Back to folder</button>{/if}</div>
+  </div>{#if find}<button class="button secondary" onclick={() => { rememberPosition(); onback(); }}>Back to folder</button>{/if}</div>
   {#if !find}
     <p class="activity-empty">Choose Find files from a folder to get started.</p>
   {:else}
@@ -153,17 +180,22 @@
         <button class="button secondary" disabled={!selectedEntries.length} onclick={() => onsave(selectedEntries)}>Save to server</button>
         <button class="button secondary" disabled={!selectedEntries.length} onclick={() => (selected = [])}>Clear selection</button>
       </div>
-      <div class="job-list">
+      <div class="job-list search-results">
         {#each entries as entry (`${entry.profile_id}:${entry.id}`)}
           <article class="job" aria-label={entry.name}>
             <label class="result-checkbox"><input type="checkbox" aria-label={`Select ${entry.name}`} checked={selected.includes(entry.id)} onchange={(event) => (selected = event.currentTarget.checked ? [...selected, entry.id] : selected.filter((id) => id !== entry.id))} /></label>
             <div class="job-main">
-              <button class="result-name" onclick={() => onopen(entry)}>{entry.name}</button>
-              <span class="result-path">{profileName(entry.profile_id)} · {parentPath(entry)}</span>
-              <div class="job-meta"><span>{entry.size !== null && !entry.size_exact ? 'About ' : ''}{formatBytes(entry.size)}</span><span>{formatDate(entry)}</span></div>
+              <div class="result-summary">
+                <SearchPreview {entry} enabled={profiles.find((profile) => profile.id === entry.profile_id)?.previews_enabled ?? false} />
+                <div class="result-details">
+                  <button class="result-name" onclick={() => { rememberPosition(); onopen(entry); }}>{entry.name}</button>
+                  <span class="result-path">{profileName(entry.profile_id)} · {parentPath(entry)}</span>
+                  <div class="job-meta"><span>{entry.size !== null && !entry.size_exact ? 'About ' : ''}{formatBytes(entry.size)}</span><span>{formatDate(entry)}</span></div>
+                </div>
+              </div>
             </div>
             <div class="job-actions">
-              <button class="button secondary" onclick={() => onbrowse(entry.profile_id, entry.parent_id)}>Open parent folder</button>
+              <button class="button secondary" onclick={() => { rememberPosition(); onbrowse(entry.profile_id, entry.parent_id); }}>Open parent folder</button>
               <button class="button secondary" onclick={() => download(entry)}>Download</button>
               <button class="button secondary" onclick={() => onsave([entry])}>Save to server</button>
             </div>
@@ -175,7 +207,57 @@
       <button class="button secondary" disabled={loading || !previous.length} onclick={back}>Previous page</button>
       <span>Page {previous.length + 1} · {entries.length} result{entries.length === 1 ? '' : 's'}</span>
       <button class="button secondary" disabled={loading || !next} onclick={forward}>Next page</button>
+      <button class="button secondary" disabled={loading} onclick={refresh}>Refresh results</button>
     </nav>
+    {#if cursor}<p class="activity-note">New files may appear on earlier pages. Refresh results to start again.</p>{/if}
     {#if coverage.some((item) => item.state === 'stale')}<p class="activity-note">The source may have changed since these files were found.</p>{/if}
   {/if}
 </section>
+
+<style>
+  .search-page {
+    container: search-results / inline-size;
+  }
+  .search-results {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .search-results .job {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    gap: 16px 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+  }
+  .search-results .job-main {
+    min-width: 0;
+  }
+  .search-results .job-actions {
+    grid-column: 1 / -1;
+  }
+  .result-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .result-details {
+    min-width: 0;
+    flex: 1;
+  }
+  @container search-results (min-width: 900px) {
+    .search-results {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @container search-results (min-width: 1480px) {
+    .search-results {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+</style>

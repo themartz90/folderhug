@@ -368,7 +368,7 @@ paths:
     get:
       operationId: searchIndex
       x-required-scopes: [browse:read]
-      description: Search indexed names/paths only. An omitted or empty q lists all authorized indexed entries in the requested scope and filters. This never starts a scan.
+      description: Search indexed names/paths only. An omitted or empty q lists all authorized indexed entries in the requested scope and filters. This never starts a scan. Pagination follows the live index; entries added before the cursor position appear when starting again without a cursor.
       parameters:
         - { name: q, in: query, schema: { type: string, minLength: 0, maxLength: 512 } }
         - { name: match, in: query, schema: { type: string, enum: [substring, prefix], default: substring } }
@@ -377,7 +377,7 @@ paths:
         - { name: direct_only, in: query, schema: { type: boolean, enum: [true] }, description: Return direct children of directory_id only. }
         - { name: categories, in: query, schema: { type: string }, description: Comma-separated file types. Cannot be combined with category. }
         - { $ref: '#/components/parameters/Limit' }
-        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/SearchCursor' }
         - { $ref: '#/components/parameters/Category' }
         - { $ref: '#/components/parameters/Extensions' }
         - { $ref: '#/components/parameters/MinSize' }
@@ -386,7 +386,7 @@ paths:
         - { $ref: '#/components/parameters/ModifiedBefore' }
       responses:
         '200':
-          description: Results ordered by natural name then profile ID and entry ID; cursor binds to index generation.
+          description: Results ordered by natural name then profile ID and entry ID. Search cursors expire after five minutes and bind to the caller, query and profile settings, including generation. Scan updates do not expire them.
           content:
             application/json: { schema: { $ref: '#/components/schemas/SearchPage' } }
         default: { $ref: '#/components/responses/Error' }
@@ -753,6 +753,7 @@ components:
     EntryID: { name: entry_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
     Cursor: { name: cursor, in: query, schema: { type: string, maxLength: 2048 } }
+    SearchCursor: { name: cursor, in: query, schema: { type: string, maxLength: 16384 } }
     NameFilter: { name: name, in: query, schema: { type: string, maxLength: 512 } }
     Category: { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
     Extensions:

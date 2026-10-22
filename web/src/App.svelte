@@ -26,7 +26,7 @@
   import Media from './lib/components/Media.svelte';
   import Downloads from './lib/screens/Downloads.svelte';
   import Search from './lib/screens/Search.svelte';
-  import { readFind, type FindRun } from './lib/find';
+  import { readFind, type FindPosition, type FindRun } from './lib/find';
   import type { Scan } from './lib/api';
   import Tokens from './lib/screens/Tokens.svelte';
   import Dialog from './lib/ui/Dialog.svelte';
@@ -64,6 +64,7 @@
   let releaseOpener: HTMLElement | null = null;
   let route = $state<Route>(readRoute());
   let find = $state<FindRun | null>(readFind());
+  let findPosition = $state<FindPosition | null>(null);
   let findScan = $state<Scan | null>(null);
   let findMissing = $state(false);
   let findFolder = $state<Entry | null>(null);
@@ -289,6 +290,7 @@
     if (!find || !canCloseFind) return;
     if (route.page === 'search') browse(find.profileId, find.directoryId);
     find = null;
+    findPosition = null;
     findScan = null;
     findMissing = false;
     try { removeStoredValue(sessionStorage, 'find'); } catch { /* Storage is optional. */ }
@@ -314,6 +316,7 @@
     openedVersion = '';
     releaseOpener = null;
     find = null;
+    findPosition = null;
     findScan = null;
     try { removeStoredValue(sessionStorage, 'find'); } catch { /* Storage is optional. */ }
     preferences = {
@@ -573,6 +576,7 @@
   }
   function startedFind(scan: Scan, directOnly: boolean, types: FindRun['types']) {
     const previous = findScan;
+    findPosition = null;
     find = { id: scan.id, profileId: scan.profile_id, directoryId: scan.directory_id, directOnly, types };
     findScan = scan;
     findMissing = false;
@@ -804,6 +808,8 @@
           {:else if route.page === 'search'}<Search
               {profiles}
               {find}
+              position={findPosition}
+              onposition={(position) => { if (find?.id === position.findId) findPosition = position; }}
               sourcePath={findPath}
               scan={findScan}
               {revision}

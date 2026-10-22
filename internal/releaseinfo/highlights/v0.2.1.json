@@ -1,0 +1,11 @@
+{
+  "version": "v0.2.1",
+  "auto_show": true,
+  "summary": "Search pagination stays in place during scans, with a more compact layout on wider screens.",
+  "highlights": [
+    "Background scan updates no longer reset later search pages. Expired results show a notice before restarting.",
+    "Search results use up to three columns, with image thumbnails and file-type icons.",
+    "Returning from a result restores your page and scroll position while the search remains open.",
+    "Updated Go to 1.27.3 to include its certificate-validation security fix."
+  ]
+}

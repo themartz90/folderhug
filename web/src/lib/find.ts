@@ -3,6 +3,13 @@ import { readStoredValue } from './storage';
 export const fileTypes = ['video', 'image', 'audio', 'document', 'archive', 'other'] as const;
 export type FileType = (typeof fileTypes)[number];
 
+export type FindPosition = {
+  findId: string;
+  cursor: string;
+  previous: string[];
+  scroll: number;
+};
+
 export type FindRun = {
   id: string;
   profileId: string;

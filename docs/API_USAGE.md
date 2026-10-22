@@ -54,6 +54,12 @@ $results
 
 Omitted and empty `q` have the same meaning. A nonempty `q` performs a name search; `match=substring` is the default and `match=prefix` selects a prefix. Scope search to a `profile_id` and, when needed, a `directory_id` from a listing. Directory scope includes that directory and its indexed descendants. Results can contain folders; select file entries before creating download jobs. A result does not prove that its source still exists.
 
+Search pagination follows the live index in natural filename order, then profile ID and entry ID. Use `next_cursor` with the same query to continue after the last returned entry, even while scans add or remove files. Files added before that position appear when you start again without a cursor. Search pages are not a fixed snapshot. Cursors expire after five minutes and remain bound to the query, caller and profile settings. If a cursor expires, start again without it. The search screen keeps later pages in place during background updates; use **Refresh results** to return to page 1.
+
+Search results use up to three columns as the available width allows. They load image thumbnails near the visible area when media previews are enabled for the profile. Videos use a file icon; open a result for native browser playback.
+
+Returning from a file or folder restores the active search's results page and scroll position. This position is kept in memory until the search is replaced or closed, the session ends, or the app page is reloaded. Changing filters or refreshing results starts at the top of page 1.
+
 ## Queue one server download
 
 The web UI's **Download to this device** action saves through the browser and needs no server destination. This example creates a **Save to server** job through the API. Creating and managing that job requires `downloads:write`. Use a file ID from a listing or indexed result. The destination ID `server` maps to the configured downloads directory. Owner sessions can also choose a discovered or explicitly configured mount and an existing folder relative to it with `destination_path`. API tokens remain limited to `server`; requests cannot supply an arbitrary host path.

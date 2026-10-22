@@ -62,6 +62,62 @@ func TestSearchHTTPReportsPartialAncestorCoverage(t *testing.T) {
 	}
 }
 
+func TestSearchHTTPLongCursorSurvivesRescan(t *testing.T) {
+	f, fetcher, cookie, session, profile := newBrowseFixture(t)
+	longName := "a" + strings.Repeat("1b", 1300) + ".txt"
+	fetcher.handler = testfixture.Handler(testfixture.Config{Files: map[string]testfixture.File{
+		"/root/" + longName: {Data: []byte("first")},
+		"/root/z.txt":       {Data: []byte("last")},
+	}})
+	s := scans.New(f.server.Store.DB, f.server.Profiles, f.server.Auth, f.server.Catalog, fetcher, nil)
+	if err := s.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	f.server.Scans = s
+	f.handler = f.server.Handler(http.NotFoundHandler())
+	var cursor string
+	for _, key := range []string{"long-cursor-initial", "long-cursor-rescan"} {
+		w := f.request("POST", "/api/v1/profiles/"+profile.ID+"/scans", `{}`, cookie, session.CSRFToken, map[string]string{"Idempotency-Key": key})
+		requireStatus(t, w, 202)
+		var scan scans.Scan
+		if err := json.Unmarshal(w.Body.Bytes(), &scan); err != nil {
+			t.Fatal(err)
+		}
+		for deadline := time.Now().Add(5 * time.Second); scan.State != "completed" && time.Now().Before(deadline); {
+			w = f.request("GET", "/api/v1/scans/"+scan.ID, "", cookie, "", nil)
+			requireStatus(t, w, 200)
+			if err := json.Unmarshal(w.Body.Bytes(), &scan); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		if scan.State != "completed" {
+			t.Fatalf("fixture scan ended in %s", scan.State)
+		}
+		if key == "long-cursor-initial" {
+			w = f.request("GET", "/api/v1/search?profile_id="+profile.ID+"&limit=1", "", cookie, "", nil)
+			requireStatus(t, w, 200)
+			var first scans.SearchPage
+			if err := json.Unmarshal(w.Body.Bytes(), &first); err != nil {
+				t.Fatal(err)
+			}
+			if len(first.Entries) != 1 || first.Entries[0].Name != longName || first.NextCursor == nil || len(*first.NextCursor) <= 4096 {
+				t.Fatal("fixture did not produce a long search cursor")
+			}
+			cursor = *first.NextCursor
+		}
+	}
+	w := f.request("GET", "/api/v1/search?profile_id="+profile.ID+"&limit=1&cursor="+url.QueryEscape(cursor), "", cookie, "", nil)
+	requireStatus(t, w, 200)
+	var next scans.SearchPage
+	if err := json.Unmarshal(w.Body.Bytes(), &next); err != nil || len(next.Entries) != 1 || next.Entries[0].Name != "z.txt" || next.NextCursor != nil {
+		t.Fatalf("long cursor did not continue after rescan: %+v, %v", next, err)
+	}
+	requireStatus(t, f.request("GET", "/api/v1/search?cursor=a&cursor=b", "", cookie, "", nil), 400)
+	requireStatus(t, f.request("GET", "/api/v1/search?cursor="+strings.Repeat("x", scans.MaxSearchCursorLength+1), "", cookie, "", nil), 409)
+}
+
 func TestScanSearchAndExportHTTPWorkflow(t *testing.T) {
 	f, fetcher, cookie, session, profile := newBrowseFixture(t)
 	s := scans.New(f.server.Store.DB, f.server.Profiles, f.server.Auth, f.server.Catalog, fetcher, nil)

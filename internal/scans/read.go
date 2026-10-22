@@ -24,10 +24,15 @@ import (
 	"github.com/themartz90/folderhug/internal/profiles"
 )
 
+// MaxSearchCursorLength accommodates a signed name from a 4096-byte upstream
+// path, including both JSON byte encoding and the outer token encoding.
+const MaxSearchCursorLength = 16 * 1024
+
 type pageCursor struct {
 	Kind, Binding, Key, ProfileID, ID string
 	Revision                          int64
 	Expires                           int64
+	Name                              []byte `json:",omitempty"`
 }
 
 func (s *Service) sign(c pageCursor) string {
@@ -39,7 +44,11 @@ func (s *Service) sign(c pageCursor) string {
 }
 func (s *Service) verify(raw, kind, binding string) (pageCursor, error) {
 	var c pageCursor
-	if len(raw) > 4096 {
+	maxLength := 4096
+	if kind == "search-live" {
+		maxLength = MaxSearchCursorLength
+	}
+	if len(raw) > maxLength {
 		return c, ErrSnapshotExpired
 	}
 	a, b, ok := strings.Cut(raw, ".")
@@ -329,25 +338,24 @@ func (s *Service) Search(ctx context.Context, p auth.Principal, q SearchQuery) (
 	}
 	copyQuery := q
 	copyQuery.Cursor = ""
-	binding := fingerprint([]any{p.CreatorID, profiles.LeaseID(p), visible, copyQuery})
-	// Revision and page rows are read in one SQLite snapshot.
+	generations := make([]int, len(visible))
+	for i, profile := range visible {
+		generations[i] = profile.Generation
+	}
+	binding := fingerprint([]any{p.CreatorID, profiles.LeaseID(p), visible, generations, copyQuery})
+	// Each page observes the current index. The signed last name and identity
+	// keep continuation independent of scan commits and deletion of its anchor.
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return SearchPage{}, err
 	}
 	defer tx.Rollback()
-	var revision int64
-	if err = tx.QueryRowContext(ctx, "SELECT revision FROM scan_index_revision WHERE id=1").Scan(&revision); err != nil {
-		return SearchPage{}, err
-	}
 	if q.Cursor != "" {
-		c, err := s.verify(q.Cursor, "search", binding)
-		if err != nil || c.Revision != revision {
+		c, err := s.verify(q.Cursor, "search-live", binding)
+		if err != nil || len(c.Name) == 0 || c.ProfileID == "" || c.ID == "" {
 			return SearchPage{}, ErrSnapshotExpired
 		}
-		if err = tx.QueryRowContext(ctx, "SELECT natural_key FROM scan_index WHERE profile_id=? AND entry_id=? AND generation=(SELECT generation FROM profiles WHERE id=?)", c.ProfileID, c.ID, c.ProfileID).Scan(&c.Key); err != nil {
-			return SearchPage{}, ErrSnapshotExpired
-		}
+		c.Key = naturalKey(string(c.Name))
 		where += " AND (i.natural_key>? OR (i.natural_key=? AND i.profile_id>?) OR (i.natural_key=? AND i.profile_id=? AND i.entry_id>?))"
 		args = append(args, c.Key, c.Key, c.ProfileID, c.Key, c.ProfileID, c.ID)
 	}
@@ -381,7 +389,12 @@ func (s *Service) Search(ctx context.Context, p auth.Principal, q SearchQuery) (
 	if len(result.Entries) > q.Limit {
 		result.Entries = result.Entries[:q.Limit]
 		last := result.Entries[q.Limit-1]
-		next := s.sign(pageCursor{Kind: "search", Binding: binding, Revision: revision, ProfileID: last.ProfileID, ID: last.ID})
+		// Names are encoded as bytes so JSON escaping and natural-key digit
+		// expansion cannot inflate an otherwise valid upstream name unboundedly.
+		next := s.sign(pageCursor{Kind: "search-live", Binding: binding, ProfileID: last.ProfileID, ID: last.ID, Name: []byte(last.Name)})
+		if len(next) > MaxSearchCursorLength {
+			return SearchPage{}, ErrBudget
+		}
 		result.NextCursor = &next
 	}
 	for _, profile := range visible {

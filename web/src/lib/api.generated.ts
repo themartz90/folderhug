@@ -371,7 +371,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Search indexed names/paths only. An omitted or empty q lists all authorized indexed entries in the requested scope and filters. This never starts a scan. */
+        /** @description Search indexed names/paths only. An omitted or empty q lists all authorized indexed entries in the requested scope and filters. This never starts a scan. Pagination follows the live index; entries added before the cursor position appear when starting again without a cursor. */
         get: operations["searchIndex"];
         put?: never;
         post?: never;
@@ -1317,6 +1317,7 @@ export interface components {
         EntryID: string;
         Limit: number;
         Cursor: string;
+        SearchCursor: string;
         NameFilter: string;
         Category: components["schemas"]["Category"];
         /** @description Comma-separated case-insensitive extensions without the dot. */
@@ -1906,7 +1907,7 @@ export interface operations {
                 /** @description Comma-separated file types. Cannot be combined with category. */
                 categories?: string;
                 limit?: components["parameters"]["Limit"];
-                cursor?: components["parameters"]["Cursor"];
+                cursor?: components["parameters"]["SearchCursor"];
                 category?: components["parameters"]["Category"];
                 /** @description Comma-separated case-insensitive extensions without the dot. */
                 extensions?: components["parameters"]["Extensions"];
@@ -1922,7 +1923,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Results ordered by natural name then profile ID and entry ID; cursor binds to index generation. */
+            /** @description Results ordered by natural name then profile ID and entry ID. Search cursors expire after five minutes and bind to the caller, query and profile settings, including generation. Scan updates do not expire them. */
             200: {
                 headers: {
                     [name: string]: unknown;
