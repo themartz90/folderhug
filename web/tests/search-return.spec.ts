@@ -12,7 +12,7 @@ async function prepareResults(page: Page) {
   await expect.poll(async () => (await (await page.request.get(`/api/v1/scans/${scan.id}`)).json()).state).toBe('completed');
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByText('Finished finding files', { exact: true })).toBeVisible();
-  const source = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&limit=100`)).json();
+  const source = await (await page.request.get(`/api/v1/search?profile_id=${scan.profile_id}&directory_id=${scan.directory_id}&categories=video,image,audio,document,archive,other&limit=100`)).json();
   expect(source.entries).toHaveLength(3);
   const image = source.entries.find((entry: { name: string }) => entry.name === 'mountain.png');
   const entries = Array.from({ length: 60 }, (_, i) => i === 40 ? image : {
